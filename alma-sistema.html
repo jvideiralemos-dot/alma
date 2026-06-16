@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -272,6 +272,11 @@ tbody tr:last-child{border-bottom:none}
 .login-socials a:hover{background:rgba(53,92,75,.08);border-color:var(--g)}
 .login-socials svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .login-dev{font-size:.72rem;color:var(--muted)}
+.login-pass-wrap{position:relative;width:100%;display:block}
+.login-pass-wrap input{width:100%;padding-right:38px}
+.login-eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:8px}
+.login-eye:hover{background:rgba(53,92,75,.08);color:var(--g)}
+.login-eye svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .import-alunos-input{display:none}
 .aluno-actions{white-space:nowrap;text-align:right}
 .aluno-actions .icon-action{width:30px;height:30px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;margin-left:4px}
@@ -305,12 +310,12 @@ tbody tr:last-child{border-bottom:none}
     <div id="l-err" class="login-err">E-mail ou senha incorretos.</div>
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="fg"><label>E-mail</label><input type="email" id="l-email" placeholder="seuemail@exemplo.com" autocomplete="email"></div>
-      <div class="fg"><label>Senha</label><input type="password" id="l-senha" placeholder="Sua senha" autocomplete="current-password"></div>
+      <div class="fg"><label>Senha</label><div class="login-pass-wrap"><input type="password" id="l-senha" placeholder="Sua senha" autocomplete="current-password"><button type="button" class="login-eye" onclick="toggleLoginSenha()" aria-label="Mostrar senha" title="Mostrar senha"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"></path><circle cx="12" cy="12" r="3"></circle></svg></button></div></div>
       <button class="btn btn-g" style="width:100%;height:44px;font-size:.88rem;margin-top:4px" onclick="login()">Entrar</button>
     </div>
     <div class="login-footer">
       <div class="login-socials">
-        <a href="/" aria-label="Voltar para o site">
+        <a href="index (2).html" aria-label="Voltar para o site">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.4 2.7 3.6 5.7 3.6 9s-1.2 6.3-3.6 9"></path><path d="M12 3c-2.4 2.7-3.6 5.7-3.6 9s1.2 6.3 3.6 9"></path></svg>
         </a>
         <a href="https://www.instagram.com/almafutevolei/" target="_blank" rel="noopener" aria-label="Instagram Alma Futevôlei">
@@ -495,7 +500,7 @@ const PARAMETROS_DEFAULT={
   vencimentos:[5,15,30],
   metodosPagamento:['Pix','Cartão de Crédito'],
   niveis:['Iniciante','Intermediário','Avançado'],
-  regras:{checkinManhaLimite:'21:00',checkinOutrosLimite:'15:00',reposicaoExpiraDias:14,pacoteValidadeMeses:2,nivelInicial:'Iniciante',senhaPadrao:'123456',pixInfo:'Pix CNPJ: 45.373.079/0001-34 · Titular: Alma Rio',textos:{checkin:'O check-in respeita as regras de prazo, saldo e disponibilidade de cada turma.',niveis:'A gestão define o nível de cada aluno e as turmas disponíveis para cada categoria.',saldo:'O saldo de aulas é calculado conforme o plano, o vencimento e as regras vigentes.',pacotes:'Pacotes têm validade própria e cada check-in consome uma aula do pacote.',inadimplencia:'Com pendência financeira, o check-in fica temporariamente bloqueado até a regularização.'}},
+  regras:{checkinManhaLimite:'21:00',checkinOutrosLimite:'15:00',reposicaoExpiraDias:14,pacoteValidadeMeses:2,nivelInicial:'Iniciante',senhaPadrao:'123456',pixInfo:'Pix CNPJ: 45.373.079/0001-34 · Titular: Alma Rio',saldoStatusPrazos:{viagem:{valor:2,unidade:'meses'},lesao:{valor:3,unidade:'meses'},inativo:{valor:1,unidade:'meses'},bloqueado:{valor:1,unidade:'meses'}},textos:{checkin:'O check-in respeita as regras de prazo, saldo e disponibilidade de cada turma.',niveis:'A gestão define o nível de cada aluno e as turmas disponíveis para cada categoria.',saldo:'O saldo de aulas é calculado conforme o plano, o vencimento e as regras vigentes.',pacotes:'Pacotes têm validade própria e cada check-in consome uma aula do pacote.',inadimplencia:'Com pendência financeira, o check-in fica temporariamente bloqueado até a regularização.'}},
   checkin:{controlarSaldoNiveis:['Iniciante','Intermediário']}
 };
 function cloneObj(o){return JSON.parse(JSON.stringify(o));}
@@ -520,6 +525,7 @@ function ensureParametros(){
   if(!Array.isArray(cfg.checkin.controlarSaldoNiveis)){cfg.checkin.controlarSaldoNiveis=d.checkin.controlarSaldoNiveis;changed=true;}
   cfg.regras=Object.assign({},d.regras,cfg.regras||{});
   cfg.regras.textos=Object.assign({},d.regras.textos,cfg.regras.textos||{});
+  cfg.regras.saldoStatusPrazos=Object.assign({},d.regras.saldoStatusPrazos,cfg.regras.saldoStatusPrazos||{});
   if(changed)DB.set('parametros',cfg);
   return cfg;
 }
@@ -625,11 +631,44 @@ function camposPendentesCadastro(a){
 }
 function alertaPerfilAluno(a){
   var html='';
+  var st=statusEfetivo(a);
+  var waLink='https://wa.me/5521983240803';
+
+  // Aguardando Aprovação
+  if(st==='Aguardando Aprovação'){
+    html+='<div class="alerta alerta-a" style="margin:0 0 14px 0">⏳ <strong>Cadastro em análise.</strong> Sua matrícula está aguardando aprovação da gestão. O check-in será liberado assim que aprovada. Acompanhe o status na aba <strong>Solicitações</strong>.</div>';
+  }
+
+  // Viagem
+  if(a.status==='Viagem'&&a.pausaInicioEm){
+    var inicioViag=new Date(a.pausaInicioEm).toLocaleDateString('pt-BR');
+    var limiteViag=calcDataLimiteSaldo(a);
+    var limiteViagStr=limiteViag?limiteViag.toLocaleDateString('pt-BR'):'—';
+    var saldoViag=0;try{saldoViag=saldoDisponivel(a);}catch(e){}
+    html+='<div class="alerta alerta-a" style="margin:0 0 14px 0">✈️ <strong>Você está em pausa por viagem desde '+inicioViag+'.</strong> Seu saldo de <strong>'+saldoViag+' aula(s)</strong> fica guardado até <strong>'+limiteViagStr+'</strong>. Volte antes dessa data para não perder suas aulas!</div>';
+  }
+
+  // Lesão
+  if(a.status==='Lesão'&&a.pausaInicioEm){
+    var inicioLes=new Date(a.pausaInicioEm).toLocaleDateString('pt-BR');
+    var limiteLes=calcDataLimiteSaldo(a);
+    var limiteLesStr=limiteLes?limiteLes.toLocaleDateString('pt-BR'):'—';
+    var saldoLes=0;try{saldoLes=saldoDisponivel(a);}catch(e){}
+    html+='<div class="alerta alerta-a" style="margin:0 0 14px 0">🩹 <strong>Sabemos que não é fácil ficar fora.</strong> Sua pausa por lesão foi registrada em <strong>'+inicioLes+'</strong>. Seu saldo de <strong>'+saldoLes+' aula(s)</strong> estará te esperando até <strong>'+limiteLesStr+'</strong>. Cuide-se bem e volte quando estiver pronto! 💚</div>';
+  }
+
+  // Bloqueado (inadimplência)
   var bloq=getInadimplentes().find(function(x){return x.id===a.id;});
   if(bloq){
     var venc=a.vencMensalidade?'dia '+a.vencMensalidade:'o vencimento cadastrado';
-    html+='<div class="alerta alerta-r" style="margin:0 0 14px 0">Sua mensalidade venceu no '+venc+'. Regularize com a gestão para liberar seu saldo de aulas e fazer novos check-ins.</div>';
+    html+='<div class="alerta alerta-r" style="margin:0 0 14px 0">⚠️ <strong>Seu acesso está temporariamente bloqueado por pendência financeira.</strong> Sua mensalidade venceu no '+venc+'. Regularize seu pagamento para voltar a fazer check-in. Qualquer dúvida, <a href="'+waLink+'" target="_blank" style="color:var(--red);font-weight:600">fale com a gente pelo WhatsApp</a>!</div>';
   }
+
+  // Inativo
+  if(a.status==='Inativa'&&!bloq){
+    html+='<div class="alerta alerta-a" style="margin:0 0 14px 0">😔 <strong>Sua matrícula está inativa no momento.</strong> Se quiser retomar suas aulas, é só <a href="'+waLink+'" target="_blank" style="color:inherit;font-weight:600">entrar em contato com a gente pelo WhatsApp</a> — adoraríamos te ver de volta! 🌊</div>';
+  }
+
   var pend=camposPendentesCadastro(a);
   if(pend.length){
     html+='<div class="alerta alerta-a" style="margin:0 0 14px 0">Seu cadastro ainda precisa de: <strong>'+pend.join(', ')+'</strong>. Complete essas informações para manter seu perfil atualizado.</div>';
@@ -645,7 +684,15 @@ function addLog(action,dados){
 
 /* == AUTH == */
 let CU=null;
-function login(){
+function toggleLoginSenha(){
+  var input=document.getElementById('l-senha');
+  var btn=document.querySelector('.login-eye');
+  if(!input||!btn)return;
+  var mostrar=input.type==='password';
+  input.type=mostrar?'text':'password';
+  btn.setAttribute('aria-label',mostrar?'Ocultar senha':'Mostrar senha');
+  btn.setAttribute('title',mostrar?'Ocultar senha':'Mostrar senha');
+}function login(){
   const em=document.getElementById('l-email').value.trim().toLowerCase();
   const pw=document.getElementById('l-senha').value;
   const u=GA().find(function(a){return a.email.toLowerCase()===em&&a.senha===pw;});
@@ -771,7 +818,7 @@ function badgeNivel(n){
 }
 function badgeStatus(s){
   s=statusEfetivo({id:null,status:s});
-  const m={Ativa:'b-ativa',Pendente:'b-ativo',Inativa:'b-inativa',Viagem:'b-pausada','Lesão':'b-pausada',Bloqueado:'b-inativa',Pausada:'b-pausada','Cancelamento Solicitado':'b-cancelamento'};
+  const m={Ativa:'b-ativa','Aguardando Aprovação':'b-ativo',Inativa:'b-inativa',Viagem:'b-pausada','Lesão':'b-pausada',Bloqueado:'b-inativa',Pausada:'b-pausada','Cancelamento Solicitado':'b-cancelamento'};
   return `<span class="badge ${m[s]||'b-inativa'}">${s}</span>`;
 }
 
@@ -869,7 +916,7 @@ function pgAlunos(el){
     <input class="search-input" id="ba" placeholder="Nome, e-mail, CPF..." oninput="filtAlunos()">
     <select id="fs" onchange="filtAlunos()" style="height:38px;border:1.5px solid var(--sand2);border-radius:8px;padding:0 10px;background:#fff;font-size:.83rem;outline:none">
       <option value="">Todos status</option>
-      <option>Ativa</option><option>Pendente</option><option>Inativa</option><option>Viagem</option><option>Lesão</option><option>Bloqueado</option>
+      <option>Ativa</option><option>Aguardando Aprovação</option><option>Inativa</option><option>Viagem</option><option>Lesão</option><option>Bloqueado</option>
     </select>
     <select id="fn" onchange="filtAlunos()" style="height:38px;border:1.5px solid var(--sand2);border-radius:8px;padding:0 10px;background:#fff;font-size:.83rem;outline:none">
       <option value="">Todos níveis</option>
@@ -910,7 +957,7 @@ function filtAlunos(){
 }
 
 
-const ALUNO_EXPORT_FIELDS=['id','timestamp','nome','telefone','cpf','email','nascimento','vencMensalidade','nivel','plano','diasSemana','horarios','comoConheceu','genero','status','databaseAlunos','motivoInativo','ct','observacao','perfil','senha','pacoteAulas','metodoPagamento','fotosLink','checkinLiberado','aulas_repos','pacoteExpira','permitirEditarHorarios','horariosAlteracaoAprovada'];
+const ALUNO_EXPORT_FIELDS=['id','timestamp','nome','telefone','cpf','email','nascimento','vencMensalidade','nivel','plano','diasSemana','horarios','comoConheceu','genero','status','databaseAlunos','motivoInativo','ct','observacao','perfil','senha','pacoteAulas','metodoPagamento','fotosLink','checkinLiberado','aulas_avulsas','aulas_repos','pacoteExpira','permitirEditarHorarios','horariosAlteracaoAprovada'];
 function csvEscape(v){
   v=v==null?'':String(v);
   var nl=String.fromCharCode(10),cr=String.fromCharCode(13);
@@ -953,6 +1000,7 @@ function parseCsv(text){
     var vals=parseCsvLine(line,sep),obj={};
     headers.forEach(function(h,i){obj[h]=vals[i]||'';});
     if(obj.pacoteAulas!==undefined)obj.pacoteAulas=parseInt(obj.pacoteAulas)||0;
+    if(obj.aulas_avulsas!==undefined)obj.aulas_avulsas=parseInt(obj.aulas_avulsas)||0;
     if(obj.checkinLiberado==='true')obj.checkinLiberado=true;
     if(obj.checkinLiberado==='false')obj.checkinLiberado=false;
     if(obj.permitirEditarHorarios==='true')obj.permitirEditarHorarios=true;
@@ -995,7 +1043,7 @@ function modalNovoAluno(){
     <div class="fg"><label>Vencimento</label><select id="na-venc">${vencOptions('', '—')}</select></div>
     <div class="fg"><label>Método pagamento</label><select id="na-metodo">${metodoOptions('', '—')}</select></div>
     <div class="fg"><label>Perfil</label><select id="na-perf"><option>Aluno</option><option>Matina</option><option>Parceria</option><option>Gestor</option></select></div>
-    <div class="fg"><label>Status</label><select id="na-status"><option>Ativa</option><option>Pendente</option><option>Inativa</option><option>Viagem</option><option>Lesão</option><option>Bloqueado</option></select></div>
+    <div class="fg"><label>Status</label><select id="na-status"><option>Ativa</option><option>Aguardando Aprovação</option><option>Inativa</option><option>Viagem</option><option>Lesão</option><option>Bloqueado</option></select></div>
   </div>
   <div class="fg" style="margin-top:12px"><label>Dias e horários de treino</label><div id="na-dias-widget"></div></div>
   <div class="fg" style="margin-top:10px"><label>Senha inicial</label><input id="na-senha" value="${esc(regras.senhaPadrao||'123456')}"></div>
@@ -1026,7 +1074,7 @@ function saveNovoAluno(){
     perfil:document.getElementById('na-perf').value,
     metodoPagamento:document.getElementById('na-metodo').value,
     observacao:document.getElementById('na-obs').value,
-    pacoteAulas:0,aulas_repos:0,fotosLink:'',
+    pacoteAulas:0,aulas_avulsas:0,aulas_repos:0,fotosLink:'',
     motivoInativo:'',ct:'',comoConheceu:'',timestamp:new Date().toISOString()
   };
   alunos.push(novo);SA(alunos);addLog('novo_aluno',{nome});
@@ -1050,6 +1098,10 @@ function excluirAluno(id){
 
 function modalEditAluno(id){
   var a=GA().find(function(x){return x.id===id;});if(!a)return;
+  var saldoAvulsaGestao=avulsasDisponiveisAluno(a).length;
+  var saldoReposGestao=reposicoesDisponiveisAluno(a).length;
+  a.aulas_avulsas=saldoAvulsaGestao;
+  a.aulas_repos=saldoReposGestao;
   var planoOpts=planoOptions(a.databaseAlunos||'', 'Sem plano');
   var metodOpts=metodoOptions(a.metodoPagamento||'', '--');
   modal('Editar - '+a.nome,
@@ -1064,10 +1116,11 @@ function modalEditAluno(id){
     +'<div class="fg"><label>Plano</label><select id="ea-plano">'+planoOpts+'</select></div>'
     +'<div class="fg"><label>Vencimento</label><select id="ea-venc">'+vencOptions(a.vencMensalidade,'--')+'</select></div>'
     +'<div class="fg"><label>Metodo pagamento</label><select id="ea-metodo">'+metodOpts+'</select></div>'
-    +'<div class="fg"><label>Status</label><select id="ea-status">'+['Ativa','Pendente','Inativa','Viagem','Lesão','Bloqueado'].map(function(s){return '<option '+(statusEfetivo(a)===s?'selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'
+    +'<div class="fg"><label>Status</label><select id="ea-status">'+['Ativa','Aguardando Aprovação','Inativa','Viagem','Lesão','Bloqueado'].map(function(s){return '<option '+(statusEfetivo(a)===s?'selected':'')+'>'+s+'</option>';}).join('')+'</select></div>'
     +'<div id="ea-perf-wrap"></div>'
     +'<div class="fg"><label>Aulas pacote</label><input id="ea-pac" type="number" min="0" value="'+(a.pacoteAulas||0)+'"></div>'
-    +'<div class="fg"><label>Creditos repos.</label><input id="ea-rep" type="number" min="0" value="'+(a.aulas_repos||0)+'"></div>'
+    +'<div class="fg"><label>Aulas avulsas</label><input id="ea-avulsa" type="number" min="0" value="'+saldoAvulsaGestao+'"></div>'
+    +'<div class="fg"><label>Creditos repos.</label><input id="ea-rep" type="number" min="0" value="'+saldoReposGestao+'"></div>'
     +'<div class="fg"><label>Subcategoria</label><select id="ea-subcat"><option value="">—</option>'+['1','2','3'].map(function(v){return '<option value="'+v+'" '+(a.subcategoria===v?'selected':'')+'>'+v+'</option>';}).join('')+'</select></div>'
     +'<div class="fg" style="margin-top:12px"><label>Dias e horarios de treino</label><div id="ea-dias-widget"></div></div>'
     +'<div class="fg" style="margin-top:10px"><label>Observacao</label><textarea id="ea-obs">'+esc(a.observacao)+'</textarea></div>'
@@ -1112,7 +1165,9 @@ function saveEditAluno(id){
   a.status=document.getElementById('ea-status').value;
   if(isG())a.perfil=document.getElementById('ea-perf').value;
   a.pacoteAulas=parseInt(document.getElementById('ea-pac').value)||0;
+  a.aulas_avulsas=parseInt(document.getElementById('ea-avulsa').value)||0;
   a.aulas_repos=parseInt(document.getElementById('ea-rep').value)||0;
+  sincronizarCreditosGestao(a,a.aulas_avulsas,a.aulas_repos);
   a.diasSemana=dh.dias;
   a.horarios=dh.hors;
   a.metodoPagamento=document.getElementById('ea-metodo').value;
@@ -1180,6 +1235,18 @@ function renderPresenca(){
 }
 
 /* == SOLICITAÇÕES (GESTOR) == */
+function urlComprovanteSolicitacao(s){
+  if(!s||!s.comprovante)return '';
+  if(typeof s.comprovante==='string')return s.comprovante;
+  if(typeof s.comprovante==='object')return s.comprovante.imagem||s.comprovante.dados||s.comprovante.url||'';
+  return '';
+}
+function nomeComprovanteSolicitacao(s){
+  if(!s)return '';
+  if(s.comprovanteNome)return s.comprovanteNome;
+  if(s.comprovante&&typeof s.comprovante==='object')return s.comprovante.nome||'';
+  return '';
+}
 function pgSolicitacoes(el){
   el.innerHTML=''
     +'<div class="pg-title">Solicitações</div>'
@@ -1210,18 +1277,36 @@ function filtSolicitacoes(){
   if(st)sols=sols.filter(function(s){return s.status===st;});
   if(pessoa)sols=sols.filter(function(s){return String(s.nomeAluno||'').toLowerCase().includes(pessoa);});
   var pendentes=GS().filter(function(s){return s.status==='pendente';}).length;
-  var alert=document.getElementById('sol-alert');
-  if(alert)alert.innerHTML=pendentes?'<div class="alerta alerta-a" style="margin-bottom:16px">⚠️ '+pendentes+' solicitação(ões) pendente(s)</div>':'';
+  var alertDiv=document.getElementById('sol-alert');
+  if(alertDiv){
+    var html='';
+    if(pendentes)html+='<div class="alerta alerta-a" style="margin-bottom:10px">⚠️ '+pendentes+' solicitação(ões) pendente(s) aguardando aprovação</div>';
+    var alertasSaldo=verificarAlertasSaldoStatus();
+    if(alertasSaldo.length){
+      alertasSaldo.forEach(function(al){
+        var cor=al.diff<=0?'alerta-r':'alerta-a';
+        var alunoObj=GA().find(function(a){return a.id===al.id;})||{};
+        var inicioStr=alunoObj.pausaInicioEm?new Date(alunoObj.pausaInicioEm).toLocaleDateString('pt-BR'):'—';
+        html+='<div class="alerta '+cor+'" style="margin-bottom:8px">📋 <strong>'+esc(al.nome)+'</strong> — Status: <strong>'+al.status+'</strong> desde '+inicioStr+' &nbsp;·&nbsp; '+al.msg+' &nbsp;·&nbsp; Saldo atual: <strong>'+al.saldo+' aula(s)</strong> — apenas informativo.</div>';
+      });
+    }
+    alertDiv.innerHTML=html;
+  }
   var tb=document.getElementById('tbody-sol');if(!tb)return;
   tb.innerHTML=sols.length?sols.map(function(s){
-    var tipo=s.tipo==='matricula'?'Nova matrícula':s.tipo==='pausa'?'Pausa':s.tipo==='alteracao_vencimento'?'Alteração vencimento':s.tipo==='alteracao_plano'?'Alteração plano':s.tipo==='alteracao_horarios'?'Alteração dias/horários':'Cancelamento';
-    var badge=s.tipo==='matricula'?'b-gestor':s.tipo==='pausa'?'b-pausada':s.tipo==='cancelamento'?'b-cancelamento':s.tipo==='alteracao_horarios'?'b-ativo':'b-ativo';
+    var tipo=s.tipo==='matricula'?'Nova matrícula':s.tipo==='pausa'?'Pausa':s.tipo==='alteracao_vencimento'?'Alteração vencimento':s.tipo==='alteracao_plano'?'Alteração plano':s.tipo==='alteracao_horarios'?'Alteração dias/horários':s.tipo==='compra_aula'?'Compra aula/pacote':'Cancelamento';
+    var badge=s.tipo==='matricula'?'b-gestor':s.tipo==='pausa'?'b-pausada':s.tipo==='cancelamento'?'b-cancelamento':s.tipo==='compra_aula'?'b-intermediario':s.tipo==='alteracao_horarios'?'b-ativo':'b-ativo';
     var info=typeof s.motivo==='object'&&s.motivo?JSON.stringify(s.motivo):s.motivo||s.planoEscolhido||'—';
+    var comprovanteUrl=urlComprovanteSolicitacao(s);
+    var comprovanteNome=nomeComprovanteSolicitacao(s);
+    var comprovanteHtml=comprovanteUrl
+      ?'<div style="margin-top:5px;display:flex;align-items:center;gap:8px"><img src="'+comprovanteUrl+'" style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid var(--sand2);cursor:pointer" onclick="ampliarComprovante(\''+s.id+'\')" title="Clique para ampliar">'+(comprovanteNome?'<span style="font-size:.72rem;color:var(--muted)">'+esc(comprovanteNome)+'</span>':'')+'</div>'
+      :'';
     return '<tr>'
       +'<td style="font-size:.76rem">'+new Date(s.ts).toLocaleDateString('pt-BR')+'</td>'
       +'<td>'+esc(s.nomeAluno||'—')+'</td>'
       +'<td><span class="badge '+badge+'">'+tipo+'</span></td>'
-      +'<td style="font-size:.78rem">'+esc(info)+'</td>'
+      +'<td style="font-size:.78rem">'+esc(info)+comprovanteHtml+'</td>'
       +'<td><span class="badge '+(s.status==='pendente'?'b-ativo':s.status==='aprovado'?'b-ativa':'b-inativa')+'">'+s.status+'</span></td>'
       +'<td style="display:flex;gap:6px">'
       +(s.status==='pendente'?'<button class="btn btn-gh btn-sm" onclick="processarSol(&quot;'+s.id+'&quot;,&quot;aprovado&quot;)">Aprovar</button><button class="btn btn-r btn-sm" onclick="processarSol(&quot;'+s.id+'&quot;,&quot;recusado&quot;)">Recusar</button>':'—')
@@ -1236,9 +1321,31 @@ function processarSol(id,decisao){
   if(decisao==='aprovado'){
     var alunos=GA();var ai=alunos.findIndex(function(a){return a.id===s.userId;});
     if(ai>=0){
-      if(s.tipo==='matricula'){alunos[ai].status='Ativa';alunos[ai].checkinLiberado=true;}
-      else if(s.tipo==='pausa'){alunos[ai].status=cleanKey(s.motivo).includes('les')?'Lesão':'Viagem';}
+      if(s.tipo==='matricula'){
+        alunos[ai].status='Ativa';
+        alunos[ai].checkinLiberado=true;
+        if(!String(alunos[ai].vencMensalidade||'').trim())alunos[ai].vencMensalidade=vencimentoDefaultMatricula(s.processadoEm||new Date());
+      }
+      else if(s.tipo==='pausa'){alunos[ai].status=cleanKey(s.motivo).includes('les')?'Lesão':'Viagem';alunos[ai].pausaInicioEm=new Date().toISOString();}
       else if(s.tipo==='cancelamento'){alunos[ai].status='Inativa';}
+      else if(s.tipo==='compra_aula'){
+        // Creditar saldo aprovado
+        var qtd=parseInt(s.quantidadeAulas)||0;
+        var tipoCom=s.tipoCompra||'';
+        if(/pacote/i.test(tipoCom)){
+          alunos[ai].pacoteAulas=(alunos[ai].pacoteAulas||0)+qtd;
+          if(!alunos[ai].pacoteExpira)alunos[ai].pacoteExpira=setPacoteExpira();
+        } else {
+          // avulsa comprada: crédito unitário, separado de reposição
+          var repos=GR();
+          for(var _q=0;_q<qtd;_q++){
+            repos.push({id:'r'+Date.now()+_q,userId:s.userId,nomeAluno:s.nomeAluno,status:'disponivel',geradoEm:new Date().toISOString(),origem:'compra_avulsa'});
+          }
+          SR(repos);
+          alunos[ai].aulas_avulsas=avulsasDisponiveisAluno(alunos[ai]).length;
+        }
+        alunos[ai].aulas_repos=reposicoesDisponiveisAluno(alunos[ai]).length;
+      }
       else if(s.tipo==='alteracao_vencimento'){
         var novo=s.motivo.replace('Novo vencimento: Dia ','');
         alunos[ai].vencMensalidade=novo;
@@ -1269,10 +1376,11 @@ function pgCheckin(el){
   el.innerHTML=avisoInadim+`
   <div class="pg-title">Check-in</div>
   <div class="pg-sub">Confirme presença em uma turma</div>
-  <div class="search-bar">
+  <div class="search-bar" style="align-items:center">
     <input type="date" id="ci-data" value="${h}" onchange="renderTurmasCI()">
     <button class="btn btn-gh btn-sm" onclick="renderTurmasCI()">↺ Atualizar</button>
     ${isG()?'<span style="font-size:.78rem;color:var(--muted)">Modo gestor — visão completa</span>':''}
+    ${!isG()?'<button class="btn btn-a btn-sm" onclick="modalComprarAulaOuPacote()" style="margin-left:auto">🛒 Comprar aula avulsa ou pacote</button>':''}
   </div>
   <div id="ci-aviso-lock" class="alerta alerta-a hidden">⏰ Check-in bloqueado — Cutoff 21h do dia anterior à aula.</div>
   <div id="ci-turmas"></div>`;
@@ -1297,7 +1405,10 @@ function renderTurmasCI(){
   
   var stAluno=statusEfetivo(CU);
   if(!isG()&&stAluno!=='Ativa'){
-    el.innerHTML='<div class="alerta alerta-a">Seu status atual é <strong>'+stAluno+'</strong>. O check-in fica disponível quando o status estiver Ativa.</div>';return;
+    var msgPend=stAluno==='Aguardando Aprovação'
+      ?'<div class="alerta alerta-a">⏳ <strong>Cadastro em análise.</strong><br>Sua solicitação de matrícula está aguardando aprovação da gestão. O check-in será liberado assim que aprovada. Edite seu perfil na aba <strong>Meu Perfil</strong>.</div>'
+      :'<div class="alerta alerta-a">Seu status atual é <strong>'+stAluno+'</strong>. O check-in fica disponível quando o status estiver Ativa.</div>';
+    el.innerHTML=msgPend;return;
   }
 
   // Turmas visíveis pela categoria
@@ -1314,7 +1425,7 @@ function renderTurmasCI(){
   }
 
   // Saldo do aluno
-  var saldo=isG()?999:saldoDisponivel(CU);
+  var saldo=isG()?999:saldoCheckinDisponivel(CU,dia);
   var meusCIs=cis.filter(function(c){return c.dia===dia&&c.userId===CU.id&&c.status!=='cancelado';});
 
   var avisoSaldo='';
@@ -1341,7 +1452,14 @@ function renderTurmasCI(){
       if(cancelada)blk='Turma cancelada';
       else if(locked)blk=cutoffLabel+' — encerrado';
       else if(full&&!jaCi)blk='Turma lotada';
-      else if(!jaCi&&saldo<=0&&controlaSaldoAluno(CU))blk='Sem saldo de aulas';
+      // Travas de sábado
+      else if(!jaCi&&isSabado(dia)){
+        var tipoSab=tipoCheckinParaAluno(CU,dia);
+        if(!tipoSab&&isMensalidade1a5(CU))blk='sabado_plano';
+        else if(!tipoSab&&isAWA(CU)&&meusCIs.length>=1)blk='sabado_awa_segundo';
+        else if(!tipoSab&&controlaSaldoAluno(CU))blk='sem_saldo_comprar';
+      }
+      else if(!jaCi&&saldo<=0&&controlaSaldoAluno(CU))blk='sem_saldo_comprar';
     }
 
     var pct=Math.min(100,Math.round(ocup/Math.max(t.vagas,1)*100));
@@ -1362,11 +1480,26 @@ function renderTurmasCI(){
       btnHtml+='</div>';
     } else if(jaCi){
       btnHtml='<button class="btn btn-r btn-sm" onclick="cancelarCI(\''+t.id+'\',\''+dia+'\')" '+(locked?' disabled':'')+'>Desfazer</button>';
+    } else if(blk==='sabado_plano'){
+      btnHtml='<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">'
+        +'<span style="font-size:.73rem;color:var(--muted);text-align:right">Para sábado, use uma avulsa ou pacote 💛</span>'
+        +'<button class="btn btn-a btn-sm" onclick="modalComprarAulaOuPacote()">🛒 Comprar avulsa ou pacote</button>'
+        +'</div>';
+    } else if(blk==='sabado_awa_segundo'){
+      btnHtml='<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">'
+        +'<span style="font-size:.73rem;color:var(--muted);text-align:right">Seu AWA já garantiu 1 aula. Para outra, use avulsa ou pacote 💛</span>'
+        +'<button class="btn btn-a btn-sm" onclick="modalComprarAulaOuPacote()">🛒 Comprar avulsa ou pacote</button>'
+        +'</div>';
+    } else if(blk==='sem_saldo_comprar'){
+      btnHtml='<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-end">'
+        +'<span style="font-size:.73rem;color:var(--muted);text-align:right">Seu saldo acabou. Compre uma avulsa ou pacote e anexe o comprovante 💛</span>'
+        +'<button class="btn btn-a btn-sm" onclick="modalComprarAulaOuPacote()">🛒 Comprar avulsa ou pacote</button>'
+        +'</div>';
     } else if(blk){
       btnHtml='<button class="btn btn-gh btn-sm" disabled title="'+blk+'">'+(cancelada?'Cancelada':full?'Lotada':locked?'Encerrado':'Sem saldo')+'</button>';
     } else {
-      var tipo=isPacote(CU)?'pacote':isAWA(CU)?'awa':'normal';
-      var label=isPacote(CU)?'Check-in ('+( CU.pacoteAulas||0)+' aulas)':'Check-in';
+      var tipo=tipoCheckinParaAluno(CU,dia)||'normal';
+      var label=tipo==='pacote'?'Check-in ('+( CU.pacoteAulas||0)+' aulas)':tipo==='avulsa'?'Check-in (avulsa)':'Check-in';
       btnHtml='<button class="btn btn-g btn-sm" onclick="fazerCI(\''+t.id+'\',\''+dia+'\',\''+tipo+'\')">'+label+'</button>';
     }
 
@@ -1490,37 +1623,155 @@ function fazerCI(turmaId,dia,tipo){
   if(ocup>=(t.vagas||0)){toast('Turma lotada','e');return;}
   if(isLockedV2(dia,t.horario)&&!isG()){toast('Prazo de check-in encerrado','e');return;}
 
-  // Verificar saldo
-  if(!isG()&&!isAWA(CU)){
-    var saldo=saldoDisponivel(CU);
-    if(saldo<=0){toast('Sem saldo de aulas disponível','e');return;}
+  var tipoFinal=!isG()?tipoCheckinParaAluno(CU,dia):(tipo||'gestor');
+
+  // Travas de sábado e saldo (proteção extra)
+  if(!isG()){
+    if(isSabado(dia)&&!tipoFinal&&isMensalidade1a5(CU)){
+      toast('Para sábado, compre uma avulsa ou pacote e envie o comprovante para aprovação.','e');return;
+    }
+    if(isSabado(dia)&&!tipoFinal&&isAWA(CU)){
+      toast('Seu AWA dá direito a 1 check-in por sábado. Para outro, use avulsa ou pacote.','e');return;
+    }
+    if(!tipoFinal){toast('Seu saldo acabou. Compre uma avulsa ou pacote e envie o comprovante para aprovação.','e');return;}
   }
 
-  // Descontar saldo
-  if(tipo==='pacote'&&!isG()){
+  // Descontar saldo comprado ou reposição
+  var repoUsadaId='';
+  if(tipoFinal==='pacote'&&!isG()){
     var alunos=GA();var ai=alunos.findIndex(function(a){return a.id===CU.id;});
     if(ai>=0){alunos[ai].pacoteAulas=Math.max(0,(alunos[ai].pacoteAulas||0)-1);if(!alunos[ai].pacoteExpira)alunos[ai].pacoteExpira=setPacoteExpira();CU.pacoteAulas=alunos[ai].pacoteAulas;CU.pacoteExpira=alunos[ai].pacoteExpira;SA(alunos);}
   }
-  // Repos: usar a mais antiga primeiro
-  if(!isG()&&tipo==='normal'&&!isAWA(CU)){
+  if((tipoFinal==='avulsa'||tipoFinal==='repos')&&!isG()){
     var repos=GR();
-    var dispRep=repos.filter(function(r){return r.userId===CU.id&&r.status==='disponivel';}).sort(function(a,b){return a.geradoEm>b.geradoEm?1:-1;});
-    // Verificar saldo do período atual primeiro
-    var aulasDir=calcSaldoPeriodo(CU);
-    var usadas=checkinsNoPeriodo(CU.id,CU.vencMensalidade);
-    // Se período atual tem saldo, usa ele. Senão usa repos da mais antiga.
-    if(aulasDir<=usadas&&dispRep.length>0){
-      var ri=repos.findIndex(function(r){return r.id===dispRep[0].id;});
-      if(ri>=0){repos[ri].status='usada';repos[ri].usadaEm=dia;SR(repos);}
-    }
+    var dispRep=repos.filter(function(r){
+      return r.userId===CU.id&&r.status==='disponivel'&&(tipoFinal==='avulsa'?r.origem==='compra_avulsa':r.origem!=='compra_avulsa');
+    }).sort(function(a,b){return a.geradoEm>b.geradoEm?1:-1;});
+    if(!dispRep.length){toast('Saldo não encontrado. Atualize e tente novamente.','e');return;}
+    var ri=repos.findIndex(function(r){return r.id===dispRep[0].id;});
+    if(ri>=0){repos[ri].status='usada';repos[ri].usadaEm=dia;repoUsadaId=repos[ri].id;SR(repos);}
   }
 
-  cis.push({id:'ci'+Date.now(),dia,turmaId,userId:CU.id,nomeAluno:CU.nome,plano:CU.databaseAlunos||CU.plano||'',horario:t.horario,nivel:t.nivel||CU.nivel,tipo,status:'ativo',ts:new Date().toISOString()});
+  cis.push({id:'ci'+Date.now(),dia,turmaId,userId:CU.id,nomeAluno:CU.nome,plano:CU.databaseAlunos||CU.plano||'',horario:t.horario,nivel:t.nivel||CU.nivel,tipo:tipoFinal,status:'ativo',repoId:repoUsadaId,ts:new Date().toISOString()});
   SC(cis);
-  addLog('checkin',{dia,horario:t.horario,tipo});
+  addLog('checkin',{dia,horario:t.horario,tipo:tipoFinal});
   toast('✅ Check-in feito!','s');
   renderTurmasCI();
 }
+/* == COMPRA DE AVULSA / PACOTE == */
+function modalComprarAulaOuPacote(){
+  var cfg=GP();
+  var planos=paramPlanos().filter(function(p){return /pacote|avulsa/i.test(p.nome)&&!/sábado/i.test(p.nome);});
+  var optsHtml=planos.map(function(p){
+    return '<label style="display:flex;align-items:center;gap:10px;padding:10px 13px;border:1.5px solid var(--sand2);border-radius:9px;cursor:pointer;background:#fff;margin-bottom:7px">'
+      +'<input type="radio" name="compra-tipo" value="'+esc(p.nome)+'" data-valor="'+p.valor+'" data-qtd="'+p.quantidade+'" onchange="atualizarResumoCompra()">'
+      +'<div><div style="font-weight:500;font-size:.88rem">'+esc(p.nome)+'</div>'
+      +'<div style="font-size:.76rem;color:var(--muted)">'+p.quantidade+' aula'+(p.quantidade!==1?'s':'')+' · R$ '+Number(p.valor).toFixed(2).replace('.',',')+'</div></div>'
+      +'</label>';
+  }).join('');
+  if(!optsHtml)optsHtml='<p style="color:var(--muted);font-size:.84rem">Nenhuma opção configurada. Acesse Parâmetros → Planos para adicionar.</p>';
+
+  modal('🛒 Comprar aula avulsa ou pacote',
+    '<div style="margin-bottom:14px">'
+      +'<div style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Escolha o produto</div>'
+      +optsHtml
+    +'</div>'
+    +'<div id="compra-qtd-wrap" style="display:none;margin-bottom:12px">'
+      +'<div class="fg"><label>Quantidade de aulas avulsas</label><input type="number" id="compra-qtd" min="1" max="20" value="1" oninput="atualizarResumoCompra()"></div>'
+    +'</div>'
+    +'<div id="compra-resumo" style="background:var(--gll);border-radius:9px;padding:12px 14px;margin-bottom:14px;display:none">'
+      +'<div id="compra-resumo-txt" style="font-size:.86rem;color:var(--text)"></div>'
+    +'</div>'
+    +'<div style="border-top:1px solid var(--sand2);padding-top:13px;margin-bottom:4px">'
+      +'<div style="font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px">📎 Comprovante de pagamento</div>'
+      +'<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px">'+esc(cfg.regras&&cfg.regras.pixInfo||'Pix — consulte a gestão para dados de pagamento')+'</div>'
+      +'<input type="file" id="compra-comprovante" accept="image/*" onchange="previewComprovante()" style="font-size:.82rem;margin-bottom:8px">'
+      +'<div id="compra-preview" style="display:none;margin-top:8px">'
+        +'<img id="compra-img" style="max-width:100%;max-height:180px;border-radius:8px;border:1px solid var(--sand2)" src="" alt="comprovante">'
+      +'</div>'
+    +'</div>',
+    [
+      {lbl:'Cancelar',cls:'btn-gh',fn:'closeModal()'},
+      {lbl:'Enviar solicitação',cls:'btn-g',fn:'enviarCompraAula()'}
+    ]
+  );
+}
+function atualizarResumoCompra(){
+  var sel=document.querySelector('input[name="compra-tipo"]:checked');
+  var resumoDiv=document.getElementById('compra-resumo');
+  var resumoTxt=document.getElementById('compra-resumo-txt');
+  var qtdWrap=document.getElementById('compra-qtd-wrap');
+  if(!sel){if(resumoDiv)resumoDiv.style.display='none';return;}
+  var nome=sel.value;
+  var valor=parseFloat(sel.dataset.valor)||0;
+  var qtdBase=parseInt(sel.dataset.qtd)||1;
+  var isAvulsaOpt=/avulsa/i.test(nome);
+  if(qtdWrap)qtdWrap.style.display=isAvulsaOpt?'block':'none';
+  var qtdFinal=isAvulsaOpt?Math.max(1,parseInt(document.getElementById('compra-qtd')?.value)||1):qtdBase;
+  var valorFinal=isAvulsaOpt?valor*qtdFinal:valor;
+  if(resumoTxt)resumoTxt.innerHTML='<strong>'+esc(nome)+'</strong>'+(isAvulsaOpt?' × '+qtdFinal:'')+'<br>'+qtdFinal+' aula'+(qtdFinal!==1?'s':'')+' · <strong>R$ '+valorFinal.toFixed(2).replace('.',',')+'</strong>';
+  if(resumoDiv)resumoDiv.style.display='block';
+}
+function previewComprovante(){
+  var input=document.getElementById('compra-comprovante');
+  var preview=document.getElementById('compra-preview');
+  var img=document.getElementById('compra-img');
+  if(!input||!input.files||!input.files[0])return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    if(img)img.src=e.target.result;
+    if(preview)preview.style.display='block';
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+function enviarCompraAula(){
+  var sel=document.querySelector('input[name="compra-tipo"]:checked');
+  if(!sel){toast('Selecione um produto','w');return;}
+  var nome=sel.value;
+  var valor=parseFloat(sel.dataset.valor)||0;
+  var qtdBase=parseInt(sel.dataset.qtd)||1;
+  var isAvulsaOpt=/avulsa/i.test(nome);
+  var qtdFinal=isAvulsaOpt?Math.max(1,parseInt(document.getElementById('compra-qtd')?.value)||1):qtdBase;
+  var valorFinal=isAvulsaOpt?valor*qtdFinal:valor;
+  var input=document.getElementById('compra-comprovante');
+  if(!input||!input.files||!input.files[0]){toast('Anexe o comprovante de pagamento','w');return;}
+  var reader=new FileReader();
+  reader.onload=function(e){
+    // Armazenar miniatura reduzida (max ~100KB base64 via canvas)
+    var imgEl=new Image();
+    imgEl.onload=function(){
+      var canvas=document.createElement('canvas');
+      var MAX=480;
+      var scale=Math.min(1,MAX/Math.max(imgEl.width,imgEl.height));
+      canvas.width=Math.round(imgEl.width*scale);
+      canvas.height=Math.round(imgEl.height*scale);
+      var ctx=canvas.getContext('2d');
+      ctx.drawImage(imgEl,0,0,canvas.width,canvas.height);
+      var thumb=canvas.toDataURL('image/jpeg',0.7);
+      var sols=GS();
+      sols.push({
+        id:'s'+Date.now(),
+        userId:CU.id,
+        nomeAluno:CU.nome,
+        tipo:'compra_aula',
+        tipoCompra:nome,
+        quantidadeAulas:qtdFinal,
+        valorTotal:valorFinal,
+        comprovante:thumb,
+        motivo:nome+' × '+qtdFinal+' aula'+(qtdFinal!==1?'s':'')+' · R$ '+valorFinal.toFixed(2).replace('.',','),
+        status:'pendente',
+        ts:new Date().toISOString()
+      });
+      SS(sols);
+      addLog('compra_aula_solicitada',{produto:nome,qtd:qtdFinal,valor:valorFinal});
+      closeModal();
+      toast('Prontinho! Sua compra foi enviada para aprovação. Assim que a gestão aprovar, o saldo libera 💛','s');
+    };
+    imgEl.src=e.target.result;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
 function cancelarCI(turmaId,dia){
   const cis=GC();
   const idx=[...cis].reverse().findIndex(c=>c.dia===dia&&c.turmaId===turmaId&&c.userId===CU.id&&c.status!=='cancelado');
@@ -1531,8 +1782,8 @@ function cancelarCI(turmaId,dia){
     const alunos=GA();const ai=alunos.findIndex(a=>a.id===CU.id);
     if(ai>=0){alunos[ai].pacoteAulas++;CU.pacoteAulas++;SA(alunos);}
   }
-  if(ci.tipo==='repos'){
-    const repos=GR();const ri=repos.findIndex(r=>r.userId===CU.id&&r.status==='usada'&&r.usadaEm===dia);
+  if(ci.tipo==='repos'||ci.tipo==='avulsa'){
+    const repos=GR();const ri=repos.findIndex(r=>(ci.repoId?r.id===ci.repoId:(r.userId===CU.id&&r.status==='usada'&&r.usadaEm===dia&&((ci.tipo==='avulsa')===(r.origem==='compra_avulsa')))));
     if(ri>=0){repos[ri].status='disponivel';delete repos[ri].usadaEm;SR(repos);}
   }
   cis[realIdx].status='cancelado';SC(cis);
@@ -1582,7 +1833,7 @@ function pgTurmas(el){
         ${['Segunda','Terça','Quarta','Quinta','Sexta','Sábado'].map(d=>`<label style="display:flex;align-items:center;gap:4px;font-size:.82rem"><input type="checkbox" class="lt-dia" value="${d}"> ${d}</label>`).join('')}
       </div>
     </div>
-    <div class="fg" style="margin-bottom:10px"><label>Horários (um por linha)</label><textarea id="lt-h" rows="4" placeholder="06:00\n07:00\n08:00\n17:00"></textarea></div>
+    <div class="fg" style="margin-bottom:10px"><label>Horários</label><input id="lt-h" placeholder="06, 07, 08 ou 06:00, 07:00, 08:00"></div>
     <div class="fg" style="margin-bottom:14px;max-width:150px"><label>Vagas por turma</label><input id="lt-v" type="number" value="16" min="1"></div>
     <button class="btn btn-g" onclick="criarLote()">Criar turmas</button>
   </div>`;
@@ -1652,11 +1903,22 @@ function excluirTurma(id){
   ST(GT().filter(t=>t.id!==id));
   toast('Excluída');pgTurmas(document.getElementById('main-content'));
 }
+function normalizarHorarioLote(h){
+  h=String(h||'').trim();
+  if(!h)return'';
+  h=h.replace('h',':').replace('H',':');
+  if(/^\d{1,2}$/.test(h))h=h.padStart(2,'0')+':00';
+  else if(/^\d{1,2}:\d{1,2}$/.test(h)){
+    var p=h.split(':');
+    h=p[0].padStart(2,'0')+':'+p[1].padStart(2,'0');
+  }
+  return /^\d{2}:\d{2}$/.test(h)?h:'';
+}
 function criarLote(){
   const ini=new Date(document.getElementById('lt-ini').value+'T12:00:00');
   const fim=new Date(document.getElementById('lt-fim').value+'T12:00:00');
   const dias=[...document.querySelectorAll('.lt-dia:checked')].map(c=>c.value);
-  const hors=document.getElementById('lt-h').value.trim().split('\n').map(h=>h.trim()).filter(Boolean);
+  const hors=document.getElementById('lt-h').value.trim().split(/[,\n;]+/).map(normalizarHorarioLote).filter(Boolean);
   const vagas=parseInt(document.getElementById('lt-v').value)||16;
   if(isNaN(ini.getTime())||isNaN(fim.getTime())){toast('Datas inválidas','e');return;}
   if(!dias.length){toast('Selecione os dias','e');return;}
@@ -1991,81 +2253,121 @@ function pgSaldo(el){
   var aulasSemanais=aulasPorSemana(u);
   var aulasDir=calcSaldoPeriodo(u);
   var usadas=checkinsNoPeriodo(u.id,u.vencMensalidade);
-  var saldoPeriodo=Math.max(0,aulasDir-usadas);
-  var repos=GR().filter(function(r){return r.userId===u.id&&r.status==='disponivel';});
-  var saldoTotal=saldoPeriodo+repos.length;
+  var avulsas=avulsasDisponiveisAluno(u);
+  var repos=reposicoesDisponiveisAluno(u);
+  var saldoPeriodo=Math.max(0,(aulasDir-usadas)+repos.length);
+  var saldoPacote=(u.pacoteAulas||0);
+  var comprasPendentes=comprasAguardandoAluno(u.id);
+  var qtdPendente=comprasPendentes.reduce(function(t,s){return t+(parseInt(s.quantidadeAulas)||0);},0);
+  var saldoExtra=saldoPacote+avulsas.length;
+  var saldoTotal=saldoPeriodo+saldoExtra;
   var ehPacote=isPacote(u);
+  var ehAWA=isAWA(u);
   var planoNome=u.databaseAlunos||u.plano||'';
   var proxVenc=periodo.fim;
   var expiraSaldo=new Date(proxVenc.getTime()+14*864e5);
   var expiraStr=expiraSaldo.toISOString().split('T')[0].split('-').reverse().join('/');
 
+  var notaSabado='';
+  var pendenteHtml=qtdPendente>0?'<div class="alerta alerta-a" style="font-size:.80rem;margin-top:8px">⏳ Compra aguardando aprovação: <strong>'+qtdPendente+' aula'+(qtdPendente!==1?'s':'')+'</strong>. Assim que a gestão aprovar, o saldo ficará liberado.</div>':'';
+
   el.innerHTML=''
     +'<div class="pg-title">Minhas Aulas</div>'
 
     +(ehPacote?
-      '<div class="card cp" style="margin-bottom:16px">'
-        +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">'
-          +'<div>'
-            +'<div style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">'+planoNome+'</div>'
-            +'<div class="saldo-num" style="font-size:2.5rem">'+(u.pacoteAulas||0)+'</div>'
-            +'<div class="saldo-lbl">aulas restantes</div>'
+      // === PLANO PACOTE PURO ===
+      '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">'
+        +'<div class="card cp">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px">'
+            +'<div>'
+              +'<div style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">'+planoNome+'</div>'
+              +'<div class="saldo-num" style="font-size:2.5rem">'+saldoPacote+'</div>'
+              +'<div class="saldo-lbl">aulas no pacote</div>'
+            +'</div>'
+            +(u.pacoteExpira
+              ?'<div style="text-align:right"><div style="font-size:.75rem;color:var(--muted)">Expira em</div>'
+                +'<div style="font-size:1rem;font-weight:600;color:'+(pacoteExpirado(u)?'var(--red)':'var(--g)')+'">'+u.pacoteExpira.split('-').reverse().join('/')+'</div>'
+                +(pacoteExpirado(u)?'<span class="badge b-inativa" style="margin-top:4px;display:block">EXPIRADO</span>':'')
+              +'</div>' :'')
           +'</div>'
-          +(u.pacoteExpira
-            ?'<div style="text-align:right"><div style="font-size:.75rem;color:var(--muted)">Expira em</div>'
-              +'<div style="font-size:1rem;font-weight:600;color:'+(pacoteExpirado(u)?'var(--red)':'var(--g)')+'">'+u.pacoteExpira.split('-').reverse().join('/')+'</div>'
-              +(pacoteExpirado(u)?'<span class="badge b-inativa" style="margin-top:4px;display:block">EXPIRADO</span>':'')
-            +'</div>' :'')
         +'</div>'
+        +(repos.length>0
+          ?'<div class="card cp" style="padding:12px 16px">'
+            +'<div style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px">Saldo do plano</div>'
+            +'<div style="display:flex;align-items:center;gap:12px">'
+              +'<div style="font-size:1.8rem;font-family:Cormorant Garamond,serif;color:var(--g)">'+repos.length+'</div>'
+              +'<div style="font-size:.82rem;color:var(--muted)">aula'+(repos.length!==1?'s':'')+' de reposição no saldo do plano</div>'
+            +'</div>'
+          +'</div>' :'')
       +'</div>'
     :
+      // === PLANO MENSALIDADE / AWA ===
       '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">'
 
-        // Plano destacado + período
+        // Plano + período
         +'<div class="card cp">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">'
             +'<div>'
-              +(planoNome?'<div style="font-size:1.25rem;font-weight:700;color:var(--g);margin-bottom:2px">'+planoNome+'</div>':'')
+              +(planoNome?'<div style="font-size:1.15rem;font-weight:700;color:var(--g);margin-bottom:2px">'+planoNome+'</div>':'')
               +'<div style="font-size:.83rem;color:var(--muted)">Período: '+periodo.iniStr.split('-').reverse().join('/')+' → '+periodo.fimStr.split('-').reverse().join('/')+'</div>'
             +'</div>'
             +'<span class="badge b-ativa">Dia '+venc+'/mês</span>'
           +'</div>'
         +'</div>'
 
-        // Cards saldo — responsivos
-        +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">'
-          +'<div class="stat-card">'
-            +'<div class="stat-v">'+aulasDir+'</div>'
-            +'<div class="stat-l">No período</div>'
-            +'<div class="stat-s">'+aulasSemanais+'×/sem</div>'
+        // Cards de saldo — plano + extra separados
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+
+          // Bloco saldo do plano
+          +'<div class="card cp">'
+            +'<div style="font-size:.70rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px">Saldo do plano</div>'
+            +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center">'
+              +'<div><div style="font-size:1.5rem;font-family:Cormorant Garamond,serif;color:var(--text)">'+aulasDir+'</div><div style="font-size:.68rem;color:var(--muted)">no período</div></div>'
+              +'<div><div style="font-size:1.5rem;font-family:Cormorant Garamond,serif;color:'+(repos.length>0?'var(--g)':'var(--text)')+'">'+repos.length+'</div><div style="font-size:.68rem;color:var(--muted)">reposição</div></div>'
+              +'<div><div style="font-size:1.5rem;font-family:Cormorant Garamond,serif;color:'+(usadas>0?'var(--amber)':'var(--text)')+'">'+usadas+'</div><div style="font-size:.68rem;color:var(--muted)">feitas</div></div>'
+              +'<div style="background:rgba(53,92,75,.06);border-radius:8px;padding:4px 0"><div style="font-size:1.5rem;font-family:Cormorant Garamond,serif;color:'+(saldoPeriodo<=0?'var(--red)':'var(--g)')+'">'+saldoPeriodo+'</div><div style="font-size:.68rem;color:var(--muted);font-weight:600">saldo</div></div>'
+            +'</div>'
+            +(aulasDir>0
+              ?'<div style="margin-top:8px;height:5px;background:var(--sand2);border-radius:4px;overflow:hidden">'
+                +'<div style="height:100%;width:'+Math.min(100,Math.round(usadas/aulasDir*100))+'%;background:'+(usadas>=aulasDir?'var(--amber)':'var(--g)')+';border-radius:4px"></div>'
+              +'</div>' :'')
+            +(saldoPeriodo>0?'<div style="font-size:.75rem;color:var(--muted);margin-top:6px">Expira em <strong>'+expiraStr+'</strong></div>':'')
+
           +'</div>'
-          +'<div class="stat-card">'
-            +'<div class="stat-v" style="color:'+(usadas>0?'var(--amber)':'var(--text)')+'">'+usadas+'</div>'
-            +'<div class="stat-l">Feitas</div>'
-            +'<div class="stat-s">este período</div>'
+
+          // Bloco saldo extra (pacote + avulsas)
+          +'<div class="card cp">'
+            +'<div style="font-size:.70rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px">Saldo extra</div>'
+            +(saldoExtra>0
+              ?'<div style="display:flex;flex-direction:column;gap:6px">'
+                +(saldoPacote>0
+                  ?'<div style="display:flex;align-items:center;justify-content:space-between">'
+                    +'<span style="font-size:.80rem;color:var(--text)">📦 Pacote</span>'
+                    +'<strong style="color:var(--g)">'+saldoPacote+'</strong>'
+                  +'</div>'
+                  :'')
+                +(avulsas.length>0
+                  ?'<div style="display:flex;align-items:center;justify-content:space-between">'
+                    +'<span style="font-size:.80rem;color:var(--text)">🎟️ Avulsa</span>'
+                    +'<strong style="color:var(--g)">'+avulsas.length+'</strong>'
+                  +'</div>'
+                  :'')
+
+                +'<div style="border-top:1px solid var(--sand2);margin-top:4px;padding-top:4px;display:flex;align-items:center;justify-content:space-between">'
+                  +'<span style="font-size:.80rem;font-weight:600">Total extra</span>'
+                  +'<strong style="color:var(--g);font-size:1.1rem">'+saldoExtra+'</strong>'
+                +'</div>'
+              +'</div>'
+              :'<div style="color:var(--muted);font-size:.83rem;padding-top:4px">Nenhum crédito extra</div>'
+            )
+            +pendenteHtml
+            +notaSabado
           +'</div>'
-          +'<div class="stat-card" style="border:2px solid '+(saldoTotal<=0?'var(--red)':'var(--g)')+'">'
-            +'<div class="stat-v" style="color:'+(saldoTotal<=0?'var(--red)':'var(--g)')+'">'+saldoTotal+'</div>'
-            +'<div class="stat-l" style="font-weight:600">Saldo</div>'
-            +'<div class="stat-s">'+(repos.length?repos.length+' repos':'disponível')+'</div>'
-          +'</div>'
+
         +'</div>'
 
-        // Barra de progresso
-        +(aulasDir>0
-          ?'<div class="card cp" style="padding:10px 14px">'
-            +'<div style="display:flex;justify-content:space-between;font-size:.76rem;color:var(--muted);margin-bottom:6px"><span>Progresso</span><span>'+usadas+' de '+aulasDir+'</span></div>'
-            +'<div style="height:7px;background:var(--sand2);border-radius:4px;overflow:hidden">'
-              +'<div style="height:100%;width:'+Math.min(100,Math.round(usadas/aulasDir*100))+'%;background:'+(usadas>=aulasDir?'var(--amber)':'var(--g)')+';border-radius:4px"></div>'
-            +'</div>'
-          +'</div>' :'')
-
         // Avisos
-        +(saldoPeriodo>0
-          ?'<div class="alerta alerta-b" style="font-size:.82rem">⏰ Saldo de <strong>'+saldoPeriodo+' aula'+(saldoPeriodo!==1?'s':'')+'</strong> expira em <strong>'+expiraStr+'</strong></div>'
-          :repos.length>0
-          ?'<div class="alerta alerta-a" style="font-size:.82rem">🔁 <strong>'+repos.length+'</strong> reposição(ões) disponível(is)</div>'
-          :saldoTotal<=0
+        +(saldoPeriodo<=0&&saldoExtra<=0
           ?'<div class="alerta alerta-r" style="font-size:.82rem">Sem saldo. Renova em <strong>'+periodo.fimStr.split('-').reverse().join('/')+'</strong></div>'
           :'')
       +'</div>'
@@ -2268,7 +2570,7 @@ function verificarInadimplencia(){
       +'</div>'
       +'</div>',
       [
-        {lbl:'Falar com a gestão', cls:'btn-g', fn:'window.open(\'https://wa.me/55SEUNUMERO\',\'_blank\');closeModal()'},
+        {lbl:'Falar com a gestão', cls:'btn-g', fn:'window.open(\'https://wa.me/5521983240803\',\'_blank\');closeModal()'},
         {lbl:'Entendi', cls:'btn-gh', fn:'closeModal()'}
       ]
     );
@@ -2344,6 +2646,97 @@ function senhaDefault(a){var c=(a.cpf||'').replace(/\D/g,'');return c||paramRegr
 function aulasPorSemana(a){return planoAulasSemana(a.databaseAlunos||a.plano||'');}
 function isPacote(a){return /pacote/i.test(a.databaseAlunos||a.plano||'');}
 function isAWA(a){return /^awa$/i.test((a.databaseAlunos||a.plano||'').trim());}
+function isAvulsa(a){return /avulsa/i.test(a.databaseAlunos||a.plano||'');}
+function isMensalidade1a5(a){return /^\d+x$/i.test((a.databaseAlunos||a.plano||'').trim());}
+function reposicoesDisponiveisAluno(a){
+  return GR().filter(function(r){return r.userId===a.id&&r.status==='disponivel'&&r.origem!=='compra_avulsa';});
+}
+function avulsasDisponiveisAluno(a){
+  return GR().filter(function(r){return r.userId===a.id&&r.status==='disponivel'&&r.origem==='compra_avulsa';});
+}
+function comprasAguardandoAluno(userId){
+  return GS().filter(function(s){return s.userId===userId&&s.tipo==='compra_aula'&&s.status==='pendente';});
+}
+function checkinsPlanoNoPeriodo(alunoId,venc){
+  var v=parseInt(venc)||5;
+  var p=getPeriodo(v);
+  return GC().filter(function(c){
+    return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr&&['pacote','avulsa','repos','gestor'].indexOf(c.tipo)===-1;
+  }).length;
+}
+function tipoCheckinParaAluno(aluno,dia){
+  if(!aluno)return'';
+  var pacote=(aluno.pacoteAulas||0)>0;
+  var avulsa=avulsasDisponiveisAluno(aluno).length>0;
+  var repos=reposicoesDisponiveisAluno(aluno).length>0;
+  if(isSabado(dia)){
+    var feitosSab=GC().filter(function(c){return c.dia===dia&&c.userId===aluno.id&&c.status!=='cancelado';}).length;
+    if(isAWA(aluno)&&feitosSab===0)return 'awa';
+    if(pacote)return 'pacote';
+    if(avulsa)return 'avulsa';
+    return '';
+  }
+  if(isPacote(aluno))return pacote?'pacote':'';
+  if(isAWA(aluno))return 'awa';
+  var aulasDir=calcSaldoPeriodo(aluno);
+  var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade);
+  if(aulasDir>usadas)return 'normal';
+  if(pacote)return 'pacote';
+  if(avulsa)return 'avulsa';
+  if(repos)return 'repos';
+  return '';
+}
+function saldoCheckinDisponivel(aluno,dia){
+  expirarReposicoes(aluno);
+  if(!controlaSaldoAluno(aluno))return 999;
+  var tipo=tipoCheckinParaAluno(aluno,dia);
+  if(!tipo)return 0;
+  if(tipo==='awa')return 999;
+  if(tipo==='pacote')return aluno.pacoteAulas||0;
+  if(tipo==='avulsa')return avulsasDisponiveisAluno(aluno).length;
+  var aulasDir=calcSaldoPeriodo(aluno);
+  var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade);
+  var saldoPlano=Math.max(0,aulasDir-usadas);
+  if(!isSabado(dia))saldoPlano+=reposicoesDisponiveisAluno(aluno).length;
+  return tipo==='repos'?reposicoesDisponiveisAluno(aluno).length:saldoPlano;
+}
+function geradoEmReposicaoPeriodoAnterior(aluno){
+  var v=parseInt(aluno&&aluno.vencMensalidade)||5;
+  var p=getPeriodo(v);
+  var d=new Date(p.ini.getFullYear(),p.ini.getMonth()-1,v,12,0,0,0);
+  return d.toISOString();
+}
+function dataExpiraReposicao(r,aluno){
+  var v=parseInt(aluno&&aluno.vencMensalidade)||5;
+  var gerado=new Date(r.geradoEm);
+  var vencSubs=new Date(gerado.getFullYear(),gerado.getMonth()+1,v);
+  return new Date(vencSubs.getTime()+(parseInt(paramRegras().reposicaoExpiraDias)||14)*864e5);
+}
+function sincronizarCreditosGestao(aluno,qtdAvulsas,qtdRepos){
+  var alunoId=aluno.id,nomeAluno=aluno.nome;
+  var repos=GR();
+  function ajustar(origem,qtd){
+    var isAvulsa=origem==='compra_avulsa';
+    var atual=repos.filter(function(r){return r.userId===alunoId&&r.status==='disponivel'&&((r.origem==='compra_avulsa')===isAvulsa);});
+    if(!isAvulsa){
+      var geradoRepos=geradoEmReposicaoPeriodoAnterior(aluno);
+      atual.forEach(function(r){r.geradoEm=geradoRepos;});
+    }
+    while(atual.length<qtd){
+      var novo={id:'r'+Date.now()+Math.random(),userId:alunoId,nomeAluno:nomeAluno,status:'disponivel',geradoEm:isAvulsa?new Date().toISOString():geradoEmReposicaoPeriodoAnterior(aluno),origem:origem};
+      repos.push(novo);atual.push(novo);
+    }
+    while(atual.length>qtd){
+      var rem=atual.pop();
+      var idx=repos.findIndex(function(r){return r.id===rem.id;});
+      if(idx>=0)repos.splice(idx,1);
+    }
+  }
+  ajustar('compra_avulsa',Math.max(0,parseInt(qtdAvulsas)||0));
+  ajustar('ajuste_gestao',Math.max(0,parseInt(qtdRepos)||0));
+  SR(repos);
+}
+function isSabado(diaStr){if(!diaStr)return false;var d=new Date(diaStr+'T12:00:00');return d.getDay()===6;}
 function controlaSaldoAluno(a){if(a&&(a.perfil==='Parceiro'||a.perfil==='Matina'))return false;var lista=(paramCheckin().controlarSaldoNiveis||[]).map(function(n){return cleanKey(n);});var nivel=cleanKey(a&&a.nivel||'');return !nivel||lista.some(function(n){return nivel.includes(n)||n.includes(nivel);});}
 function niveisVisiveis(nivel){
   var n=(nivel||'').toLowerCase();
@@ -2376,33 +2769,22 @@ function calcSaldoPeriodo(aluno){
   var dias=(p.fim-p.ini)/(864e5);
   return Math.round(dias/7*aps);
 }
-function checkinsNoPeriodo(alunoId,venc){
-  var v=parseInt(venc)||5;
-  var p=getPeriodo(v);
-  return GC().filter(function(c){return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr;}).length;
-}
+function checkinsNoPeriodo(alunoId,venc){return checkinsPlanoNoPeriodo(alunoId,venc);}
 function saldoDisponivel(aluno){
   if(!controlaSaldoAluno(aluno))return 999;
-  if(isPacote(aluno)){
-    if(pacoteExpirado(aluno))return 0;
-    return aluno.pacoteAulas||0;
-  }
-
-  var aulasDir=calcSaldoPeriodo(aluno);
-  var usadas=checkinsNoPeriodo(aluno.id,aluno.vencMensalidade);
-  var saldoPer=Math.max(0,aulasDir-usadas);
   expirarReposicoes(aluno);
-  var repos=GR().filter(function(r){return r.userId===aluno.id&&r.status==='disponivel';}).length;
-  return saldoPer+repos;
+  return saldoCheckinDisponivel(aluno,hoje());
 }
 function expirarReposicoes(aluno){
   var v=parseInt(aluno.vencMensalidade)||5;
   var hoje=new Date();var repos=GR();var mudou=false;
   repos.forEach(function(r,i){
     if(r.userId!==aluno.id||r.status!=='disponivel'||!r.geradoEm) return;
-    var gerado=new Date(r.geradoEm);
-    var vencSubs=new Date(gerado.getFullYear(),gerado.getMonth()+1,v);
-    var expira=new Date(vencSubs.getTime()+(parseInt(paramRegras().reposicaoExpiraDias)||14)*864e5);
+    if(r.origem==='ajuste_gestao'){
+      var geradoGestao=geradoEmReposicaoPeriodoAnterior(aluno);
+      if(r.geradoEm!==geradoGestao){repos[i].geradoEm=geradoGestao;mudou=true;}
+    }
+    var expira=dataExpiraReposicao(repos[i],aluno);
     if(hoje>expira){repos[i].status='expirada';mudou=true;}
   });
   if(mudou)SR(repos);
@@ -2415,15 +2797,56 @@ function nivelLabel(turma){
   return turma.nivel||'';
 }
 
+/* == PRAZO DE SALDO POR STATUS == */
+function getPrazoStatus(statusKey){
+  var prazos=paramRegras().saldoStatusPrazos||{};
+  return prazos[statusKey]||null;
+}
+function calcDataLimiteSaldo(aluno){
+  var st=aluno.status||'';
+  var key=st==='Viagem'?'viagem':st==='Lesão'?'lesao':st==='Inativa'?'inativo':st==='Bloqueado'?'bloqueado':null;
+  if(!key)return null;
+  var prazo=getPrazoStatus(key);
+  if(!prazo)return null;
+  var inicio=aluno.pausaInicioEm?new Date(aluno.pausaInicioEm):null;
+  if(!inicio)return null;
+  var limite=new Date(inicio);
+  if(prazo.unidade==='meses'){limite.setMonth(limite.getMonth()+parseInt(prazo.valor||1));}
+  else{limite.setDate(limite.getDate()+parseInt(prazo.valor||30));}
+  return limite;
+}
+function verificarAlertasSaldoStatus(){
+  var alunos=GA().filter(function(a){return a.perfil==='Aluno';});
+  var alertas=[];
+  alunos.forEach(function(a){
+    var limite=calcDataLimiteSaldo(a);
+    if(!limite)return;
+    var hoje=new Date();
+    var diff=Math.ceil((limite-hoje)/(864e5));
+    if(diff<=7){
+      var saldo=0;try{saldo=saldoDisponivel(a);}catch(e){}
+      alertas.push({nome:a.nome,status:a.status||'',msg:diff<=0?'Prazo encerrado há '+Math.abs(diff)+' dia(s)':'Expira em '+diff+' dia(s) ('+limite.toLocaleDateString('pt-BR')+')',saldo:saldo,diff:diff,id:a.id});
+    }
+  });
+  return alertas;
+}
 
 /* == EXTRAS V2 == */
 function setPacoteExpira(){var d=new Date();d.setMonth(d.getMonth()+(parseInt(paramRegras().pacoteValidadeMeses)||2));return d.toISOString().split('T')[0];}
+function vencimentoDefaultMatricula(dataRef){
+  var d=dataRef?new Date(dataRef):new Date();
+  var dia=d.getDate();
+  if(dia<=5)return '5';
+  if(dia<=15)return '15';
+  if(dia<=30)return '30';
+  return '5';
+}
 
 function registrarMatriculaPendente(dados){
   var alunos=GA();
   if(alunos.find(function(a){return a.email.toLowerCase()===(dados.email||'').toLowerCase();})){return{ok:false,msg:'Email ja cadastrado'};}
   var cpfLimpo=(dados.cpf||'').replace(/\D/g,'');
-  var novo={id:'a'+Date.now(),nome:dados.nome,email:dados.email,senha:cpfLimpo||paramRegras().senhaPadrao||'123456',cpf:cpfLimpo,telefone:dados.telefone||'',nascimento:dados.nascimento||'',genero:dados.genero||'',nivel:'Iniciante',plano:'',databaseAlunos:dados.plano||'',vencMensalidade:dados.vencimento||'',diasSemana:'',horarios:'',status:'Pendente',perfil:'Aluno',metodoPagamento:dados.metodoPagamento||'',observacao:'Matricula via site',pacoteAulas:0,aulas_repos:0,fotosLink:'',checkinLiberado:false,timestamp:new Date().toISOString()};
+  var novo={id:'a'+Date.now(),nome:dados.nome,email:dados.email,senha:cpfLimpo||paramRegras().senhaPadrao||'123456',cpf:cpfLimpo,telefone:dados.telefone||'',nascimento:dados.nascimento||'',genero:dados.genero||'',nivel:'Iniciante',plano:'',databaseAlunos:dados.plano||'',vencMensalidade:dados.vencimento||'',diasSemana:'',horarios:'',status:'Aguardando Aprovação',perfil:'Aluno',metodoPagamento:dados.metodoPagamento||'',observacao:'Matricula via site',pacoteAulas:0,aulas_avulsas:0,aulas_repos:0,fotosLink:'',checkinLiberado:false,timestamp:new Date().toISOString()};
   alunos.push(novo);SA(alunos);
   var sols=GS();
   sols.push({id:'s'+Date.now(),userId:novo.id,nomeAluno:novo.nome,tipo:'matricula',planoEscolhido:dados.plano||'',motivo:'Plano: '+(dados.plano||'?')+' | Venc: '+(dados.vencimento||'?')+' | Pag: '+(dados.metodoPagamento||'?'),status:'pendente',ts:new Date().toISOString()});
@@ -2759,7 +3182,21 @@ function paramTab(tab){
     body.innerHTML='<div class="card cp" style="max-width:520px"><div class="card-title">Níveis</div><textarea id="param-niveis" class="param-list" rows="6" style="width:100%">'+cfg.niveis.join('\n')+'</textarea><div class="param-help">A ordem ajuda a manter a hierarquia das turmas.</div><button class="btn btn-g" style="margin-top:12px" onclick="salvarParamNiveis()">Salvar níveis</button></div>';
   }else if(tab==='regras'){
     var r=cfg.regras;
-    body.innerHTML='<div class="card cp" style="max-width:680px"><div class="card-title">Regras operacionais</div><div class="form-grid"><div class="fg"><label>Check-in manhã trava às</label><input id="param-manha" type="time" value="'+(r.checkinManhaLimite||'21:00')+'"></div><div class="fg"><label>Check-in demais horários trava às</label><input id="param-outros" type="time" value="'+(r.checkinOutrosLimite||'15:00')+'"></div><div class="fg"><label>Reposição expira em dias</label><input id="param-repos" type="number" min="1" value="'+(r.reposicaoExpiraDias||14)+'"></div><div class="fg"><label>Pacote expira em meses</label><input id="param-pacote" type="number" min="1" value="'+(r.pacoteValidadeMeses||2)+'"></div><div class="fg"><label>Nível inicial</label><select id="param-nivel-inicial">'+optionList(cfg.niveis,r.nivelInicial||'Iniciante')+'</select></div><div class="fg"><label>Senha padrão</label><input id="param-senha" value="'+esc(r.senhaPadrao||'123456')+'"></div></div><button class="btn btn-g" style="margin-top:12px" onclick="salvarParamRegras()">Salvar regras</button></div>';
+    var sp=r.saldoStatusPrazos||{viagem:{valor:2,unidade:'meses'},lesao:{valor:3,unidade:'meses'},inativo:{valor:1,unidade:'meses'},bloqueado:{valor:1,unidade:'meses'}};
+    function prazoHtml(key,label,emoji){
+      var p=sp[key]||{valor:1,unidade:'meses'};
+      return '<div class="fg"><label>'+emoji+' '+label+' — prazo do saldo</label><div style="display:flex;gap:8px;align-items:center"><input id="prazo-val-'+key+'" type="number" min="1" style="width:80px" value="'+p.valor+'"><select id="prazo-uni-'+key+'" style="height:40px;border:1.5px solid var(--sand2);border-radius:8px;padding:0 10px;font-size:.85rem"><option value="meses"'+(p.unidade==='meses'?' selected':'')+'>meses</option><option value="dias"'+(p.unidade==='dias'?' selected':'')+'>dias</option></select></div><div style="font-size:.72rem;color:var(--muted);margin-top:3px">Saldo preservado por esse período após início do status</div></div>';
+    }
+    body.innerHTML='<div class="card cp" style="max-width:680px"><div class="card-title">Regras operacionais</div><div class="form-grid"><div class="fg"><label>Check-in manhã trava às</label><input id="param-manha" type="time" value="'+(r.checkinManhaLimite||'21:00')+'"></div><div class="fg"><label>Check-in demais horários trava às</label><input id="param-outros" type="time" value="'+(r.checkinOutrosLimite||'15:00')+'"></div><div class="fg"><label>Nível inicial</label><select id="param-nivel-inicial">'+optionList(cfg.niveis,r.nivelInicial||'Iniciante')+'</select></div><div class="fg"><label>Senha padrão</label><input id="param-senha" value="'+esc(r.senhaPadrao||'123456')+'"></div></div>'
+      +'<div style="margin-top:20px;border-top:1px solid var(--sand2);padding-top:16px"><div class="card-title" style="margin-bottom:14px">⏱️ Prazo de preservação do saldo por status</div><div style="font-size:.80rem;color:var(--muted);margin-bottom:14px">Define por quanto tempo o saldo de aulas fica preservado quando o aluno entra em cada status. O sistema alerta a gestão quando o prazo estiver próximo de vencer (7 dias antes).</div><div class="form-grid">'
+      +'<div class="fg"><label>✅ Ativo — reposição expira em</label><div style="display:flex;gap:8px;align-items:center"><input id="param-repos" type="number" min="1" style="width:80px" value="'+(r.reposicaoExpiraDias||14)+'"><span style="font-size:.85rem;color:var(--muted)">dias</span></div><div style="font-size:.72rem;color:var(--muted);margin-top:3px">Dias após o vencimento para expirar aulas não usadas</div></div>'
+      +'<div class="fg"><label>✅ Ativo — pacote expira em</label><div style="display:flex;gap:8px;align-items:center"><input id="param-pacote" type="number" min="1" style="width:80px" value="'+(r.pacoteValidadeMeses||2)+'"><span style="font-size:.85rem;color:var(--muted)">meses</span></div><div style="font-size:.72rem;color:var(--muted);margin-top:3px">Meses a partir da data de ativação do pacote</div></div>'
+      +prazoHtml('viagem','Viagem','✈️')
+      +prazoHtml('lesao','Lesão','🩹')
+      +prazoHtml('inativo','Inativo','😔')
+      +prazoHtml('bloqueado','Bloqueado','⚠️')
+      +'</div></div>'
+      +'<button class="btn btn-g" style="margin-top:16px" onclick="salvarParamRegras()">Salvar regras</button></div>';
   }else if(tab==='checkin'){
     var ch=cfg.checkin||{};
     body.innerHTML='<div class="card cp" style="max-width:620px"><div class="card-title">Regras de saldo no check-in</div><div class="fg"><label>Níveis que controlam saldo de aulas</label><textarea id="param-checkin-niveis" class="param-list" rows="5" style="width:100%">'+(ch.controlarSaldoNiveis||[]).join('\n')+'</textarea></div><div class="param-help">Uma linha por nível. Os níveis fora dessa lista ficam com check-in livre de saldo. Padrão: Iniciante e Intermediário. AWA também consome saldo quando o nível estiver nesta lista.</div><button class="btn btn-g" style="margin-top:12px" onclick="salvarParamCheckin()">Salvar check-in</button></div>';
@@ -2787,7 +3224,22 @@ function salvarParamVencimentos(){var cfg=GP();cfg.vencimentos=linhasParam('para
 function salvarParamPagamento(){var cfg=GP();cfg.metodosPagamento=linhasParam('param-metodos');cfg.regras.pixInfo=document.getElementById('param-pix').value;SP(cfg);addLog('edit_parametros',{aba:'pagamento'});toast('Pagamento salvo','s');paramTab('pagamento');}
 function salvarParamNiveis(){var cfg=GP();cfg.niveis=linhasParam('param-niveis');SP(cfg);addLog('edit_parametros',{aba:'niveis'});toast('Níveis salvos','s');paramTab('niveis');}
 function salvarParamCheckin(){var cfg=GP();cfg.checkin=cfg.checkin||{};cfg.checkin.controlarSaldoNiveis=linhasParam('param-checkin-niveis');SP(cfg);addLog('edit_parametros',{aba:'checkin'});toast('Check-in salvo','s');paramTab('checkin');}
-function salvarParamRegras(){var cfg=GP();cfg.regras.checkinManhaLimite=document.getElementById('param-manha').value||'21:00';cfg.regras.checkinOutrosLimite=document.getElementById('param-outros').value||'15:00';cfg.regras.reposicaoExpiraDias=parseInt(document.getElementById('param-repos').value)||14;cfg.regras.pacoteValidadeMeses=parseInt(document.getElementById('param-pacote').value)||2;cfg.regras.nivelInicial=document.getElementById('param-nivel-inicial').value||'Iniciante';cfg.regras.senhaPadrao=document.getElementById('param-senha').value||'123456';SP(cfg);addLog('edit_parametros',{aba:'regras'});toast('Regras salvas','s');paramTab('regras');}
+function salvarParamRegras(){
+  var cfg=GP();
+  cfg.regras.checkinManhaLimite=document.getElementById('param-manha').value||'21:00';
+  cfg.regras.checkinOutrosLimite=document.getElementById('param-outros').value||'15:00';
+  cfg.regras.reposicaoExpiraDias=parseInt(document.getElementById('param-repos').value)||14;
+  cfg.regras.pacoteValidadeMeses=parseInt(document.getElementById('param-pacote').value)||2;
+  cfg.regras.nivelInicial=document.getElementById('param-nivel-inicial').value||'Iniciante';
+  cfg.regras.senhaPadrao=document.getElementById('param-senha').value||'123456';
+  cfg.regras.saldoStatusPrazos=cfg.regras.saldoStatusPrazos||{};
+  ['viagem','lesao','inativo','bloqueado'].forEach(function(k){
+    var valEl=document.getElementById('prazo-val-'+k);
+    var uniEl=document.getElementById('prazo-uni-'+k);
+    if(valEl&&uniEl){cfg.regras.saldoStatusPrazos[k]={valor:parseInt(valEl.value)||1,unidade:uniEl.value||'meses'};}
+  });
+  SP(cfg);addLog('edit_parametros',{aba:'regras'});toast('Regras salvas','s');paramTab('regras');
+}
 
 function pgRegras(el){
   var gestor=isG();
@@ -2874,6 +3326,19 @@ function pgRegras(el){
       +'</ul></div>'
 
     +'</div>';
+}
+function ampliarComprovante(solId){
+  var s=GS().find(function(x){return x.id===solId;});
+  var comprovanteUrl=urlComprovanteSolicitacao(s);
+  if(!s||!comprovanteUrl){toast('Comprovante não encontrado','e');return;}
+  modal('📎 Comprovante — '+esc(s.nomeAluno),
+    '<div style="text-align:center">'
+      +'<img src="'+comprovanteUrl+'" style="max-width:100%;max-height:70vh;border-radius:10px;border:1px solid var(--sand2)">'
+      +(nomeComprovanteSolicitacao(s)?'<div style="font-size:.78rem;color:var(--muted);margin-top:8px">'+esc(nomeComprovanteSolicitacao(s))+'</div>':'')
+      +'<div style="font-size:.80rem;color:var(--muted);margin-top:10px">'+esc(s.motivo||'')+'</div>'
+    +'</div>',
+    [{lbl:'Fechar',cls:'btn-gh',fn:'closeModal()'}]
+  );
 }
 function salvarRegrasMenu(){
   if(!isGestor()){toast('Apenas gestor pode alterar as regras','e');return;}
