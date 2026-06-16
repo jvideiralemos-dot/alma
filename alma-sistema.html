@@ -315,7 +315,7 @@ tbody tr:last-child{border-bottom:none}
     </div>
     <div class="login-footer">
       <div class="login-socials">
-        <a href="index.html" aria-label="Voltar para o site">
+        <a href="index (2).html" aria-label="Voltar para o site">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18"></path><path d="M12 3c2.4 2.7 3.6 5.7 3.6 9s-1.2 6.3-3.6 9"></path><path d="M12 3c-2.4 2.7-3.6 5.7-3.6 9s1.2 6.3 3.6 9"></path></svg>
         </a>
         <a href="https://www.instagram.com/almafutevolei/" target="_blank" rel="noopener" aria-label="Instagram Alma Futevôlei">
@@ -405,11 +405,263 @@ ALUNOS_SEED=ALUNOS_SEED.concat([{"timestamp":"9/18/2025 18:24:54","nome":"Robert
 const GESTOR_DEFAULT = {id:'g001',nome:'Joana',email:'joana@almafutevolei.com',senha:'alma2024',perfil:'Gestor',nivel:'Gestor',status:'Ativa',plano:'',cpf:'00000000001',telefone:'',nascimento:'',genero:'F',diasSemana:'',horarios:'',vencMensalidade:'',comoConheceu:'',databaseAlunos:'',motivoInativo:'',ct:'',observacao:'',metodoPagamento:'',fotosLink:'',pacoteAulas:0,aulas_repos:0};
 
 /* == STORAGE == */
+/* == SUPABASE CONFIG == */
+const SUPABASE_URL = 'https://bsozqyolqowoqmkokhal.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJzb3pxeW9scW93b3Fta29raGFsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2Mzc1NTgsImV4cCI6MjA5NzIxMzU1OH0.1g0Df8dqIcusNXqRpmJdAmXPoENl5mW0PsIhdyAgZeI';
+
+async function sbFetch(path, options={}) {
+  const url = SUPABASE_URL + '/rest/v1/' + path;
+  const headers = {
+    'apikey': SUPABASE_KEY,
+    'Authorization': 'Bearer ' + SUPABASE_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': options.prefer || 'return=representation',
+    ...( options.headers || {} )
+  };
+  const res = await fetch(url, { method: options.method || 'GET', headers, body: options.body ? JSON.stringify(options.body) : undefined });
+  if (!res.ok) { const t = await res.text(); console.error('Supabase erro:', res.status, t); return null; }
+  if (res.status === 204) return [];
+  return res.json();
+}
+
+// Cache local para evitar requests desnecessários
+const _cache = {};
+const _dirty = {};
+
+/* == STORAGE (localStorage para session/parametros/config, Supabase para dados) == */
 const DB={
   get:(k,d=null)=>{try{const v=localStorage.getItem('alma_'+k);return v!==null?JSON.parse(v):d}catch{return d}},
   set:(k,v)=>localStorage.setItem('alma_'+k,JSON.stringify(v)),
   del:(k)=>localStorage.removeItem('alma_'+k)
 };
+
+/* == FUNÇÕES ASYNC DE DADOS == */
+async function fetchAlunos() {
+  const d = await sbFetch('alunos?order=nome');
+  return d || [];
+}
+async function fetchCheckins() {
+  const d = await sbFetch('checkins?order=ts.desc&limit=2000');
+  return d || [];
+}
+async function fetchTurmas() {
+  const d = await sbFetch('turmas?order=dia,horario');
+  return d || [];
+}
+async function fetchSolicitacoes() {
+  const d = await sbFetch('solicitacoes?order=ts.desc&limit=500');
+  return d || [];
+}
+async function fetchRepos() {
+  const d = await sbFetch('repos_creditos?order=geradoEm.desc&limit=500');
+  return d || [];
+}
+
+async function upsertAluno(aluno) {
+  await sbFetch('alunos?id=eq.' + aluno.id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbFetch('alunos', { method: 'POST', body: aluno });
+}
+async function upsertCheckin(ci) {
+  await sbFetch('checkins?id=eq.' + ci.id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbFetch('checkins', { method: 'POST', body: ci });
+}
+async function upsertTurma(t) {
+  await sbFetch('turmas?id=eq.' + t.id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbFetch('turmas', { method: 'POST', body: t });
+}
+async function upsertSolicitacao(s) {
+  await sbFetch('solicitacoes?id=eq.' + s.id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbFetch('solicitacoes', { method: 'POST', body: s });
+}
+async function upsertRepo(r) {
+  await sbFetch('repos_creditos?id=eq.' + r.id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbFetch('repos_creditos', { method: 'POST', body: r });
+}
+async function deleteRepo(id) {
+  return sbFetch('repos_creditos?id=eq.' + id, { method: 'DELETE', prefer: 'return=minimal' });
+}
+async function deleteCheckin(id) {
+  return sbFetch('checkins?id=eq.' + id, { method: 'DELETE', prefer: 'return=minimal' });
+}
+
+/* == WRAPPERS SYNC (usam cache) == */
+// Alunos
+const GA = () => _cache.alunos || [];
+const SA = (arr) => {
+  // Detectar quais alunos mudaram e salvar no Supabase em background
+  const prev = _cache.alunos || [];
+  const changed = arr.filter(a => {
+    const p = prev.find(x => x.id === a.id);
+    return !p || JSON.stringify(p) !== JSON.stringify(a);
+  });
+  _cache.alunos = arr;
+  if (changed.length) {
+    (async () => { for (const a of changed) { await upsertAluno(a); } })();
+  }
+};
+
+// Checkins
+const GC = () => _cache.checkins || [];
+const SC = (arr) => {
+  const prev = _cache.checkins || [];
+  const changed = arr.filter(c => {
+    const p = prev.find(x => x.id === c.id);
+    return !p || JSON.stringify(p) !== JSON.stringify(c);
+  });
+  // Detectar removidos
+  const removed = prev.filter(c => !arr.find(x => x.id === c.id));
+  _cache.checkins = arr;
+  if (changed.length) {
+    (async () => { for (const c of changed) { await upsertCheckin(c); } })();
+  }
+  if (removed.length) {
+    (async () => { for (const c of removed) { await deleteCheckin(c.id); } })();
+  }
+};
+
+// Turmas
+const GT = () => _cache.turmas || [];
+const ST = (arr) => {
+  const prev = _cache.turmas || [];
+  const changed = arr.filter(t => {
+    const p = prev.find(x => x.id === t.id);
+    return !p || JSON.stringify(p) !== JSON.stringify(t);
+  });
+  _cache.turmas = arr;
+  if (changed.length) {
+    (async () => { for (const t of changed) { await upsertTurma(t); } })();
+  }
+};
+
+// Solicitações
+const GS = () => _cache.solicitacoes || [];
+const SS = (arr) => {
+  const prev = _cache.solicitacoes || [];
+  const changed = arr.filter(s => {
+    const p = prev.find(x => x.id === s.id);
+    return !p || JSON.stringify(p) !== JSON.stringify(s);
+  });
+  _cache.solicitacoes = arr;
+  if (changed.length) {
+    (async () => { for (const s of changed) { await upsertSolicitacao(s); } })();
+  }
+};
+
+// Repos
+const GR = () => _cache.repos || [];
+const SR = (arr) => {
+  const prev = _cache.repos || [];
+  const changed = arr.filter(r => {
+    const p = prev.find(x => x.id === r.id);
+    return !p || JSON.stringify(p) !== JSON.stringify(r);
+  });
+  const removed = prev.filter(r => !arr.find(x => x.id === r.id));
+  _cache.repos = arr;
+  if (changed.length) {
+    (async () => { for (const r of changed) { await upsertRepo(r); } })();
+  }
+  if (removed.length) {
+    (async () => { for (const r of removed) { await deleteRepo(r.id); } })();
+  }
+};
+
+// Logs
+const GL = () => _cache.logs || [];
+
+async function addLog(action, dados) {
+  try {
+    await sbFetch('logs', { method: 'POST', body: { ts: new Date().toISOString(), action, dados, usuario: CU?.nome || '?' } });
+  } catch(e) { console.warn('log err', e); }
+}
+
+/* == PARAMETROS (localStorage) == */
+function SP(cfg) { DB.set('parametros', cfg); }
+
+/* == INIT == */
+async function initDB() {
+  // Mostrar loading
+  const ls = document.getElementById('login-screen');
+  const orig = ls ? ls.innerHTML : '';
+  if (ls) {
+    const div = document.createElement('div');
+    div.id = 'sb-loading';
+    div.style.cssText = 'position:fixed;inset:0;background:#f5f0eb;display:flex;align-items:center;justify-content:center;z-index:9999;font-family:DM Sans,sans-serif;flex-direction:column;gap:12px;';
+    div.innerHTML = '<div style="font-size:1.1rem;color:#355C4B;font-weight:500;">Carregando...</div><div style="width:40px;height:40px;border:3px solid #e0d8ce;border-top-color:#355C4B;border-radius:50%;animation:spin .8s linear infinite"></div>';
+    document.body.appendChild(div);
+    if (!document.getElementById('sb-spin-style')) {
+      const st = document.createElement('style');
+      st.id = 'sb-spin-style';
+      st.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(st);
+    }
+  }
+
+  try {
+    // Carregar todos os dados em paralelo
+    const [alunos, checkins, turmas, sols, repos] = await Promise.all([
+      fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos()
+    ]);
+
+    _cache.alunos = alunos;
+    _cache.checkins = checkins;
+    _cache.turmas = turmas;
+    _cache.solicitacoes = sols;
+    _cache.repos = repos;
+    _cache.logs = [];
+
+    // Se banco vazio, popular com seed
+    if (!alunos.find(a => a.email === GESTOR_DEFAULT.email)) {
+      console.log('Populando banco com dados iniciais...');
+      const seed = ALUNOS_SEED.slice();
+      if (!seed.find(x => x.email === GESTOR_DEFAULT.email)) seed.unshift(GESTOR_DEFAULT);
+      // Inserir em lotes de 50
+      for (let i = 0; i < seed.length; i += 50) {
+        const lote = seed.slice(i, i + 50);
+        await sbFetch('alunos', { method: 'POST', body: lote, prefer: 'return=minimal' });
+      }
+      _cache.alunos = await fetchAlunos();
+    }
+
+    // Parâmetros no localStorage se não existirem
+    if (!DB.get('parametros')) {
+      DB.set('parametros', cloneObj(PARAMETROS_DEFAULT));
+    }
+
+  } catch(e) {
+    console.error('Erro ao carregar dados:', e);
+    alert('Erro ao conectar ao banco de dados. Verifique sua conexão e recarregue a página.');
+  }
+
+  // Remover loading
+  const loader = document.getElementById('sb-loading');
+  if (loader) loader.remove();
+
+  // Verificar sessão salva
+  const sid = DB.get('session');
+  if (sid) {
+    const u = _cache.alunos.find(a => a.id === sid);
+    if (u) {
+      CU = u;
+      document.getElementById('login-screen').style.display = 'none';
+      const sist = document.getElementById('sistema');
+      sist.style.display = 'flex';
+      sist.style.flexDirection = 'row';
+      sist.classList.remove('hidden');
+      setTimeout(() => {
+        buildSidebar();
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetPage = urlParams.get('page');
+        if (targetPage && ['checkin','perfil','saldo','pagamento','dashboard'].includes(targetPage)) {
+          nav(targetPage);
+        } else {
+          nav(isG() ? 'dashboard' : 'perfil');
+          verificarInadimplencia();
+        }
+      }, 50);
+    }
+  }
+}
+
 
 
 function salvarMetodoPagamento(){
@@ -530,7 +782,7 @@ function ensureParametros(){
   return cfg;
 }
 function GP(){return ensureParametros();}
-function SP(cfg){DB.set('parametros',cfg);}
+// SP definido no bloco Supabase
 function paramPlanos(todos){var p=GP().planos||[];return todos?p:p.filter(function(x){return x.ativo!==false;});}
 function paramVencimentos(){return (GP().vencimentos||[]).map(function(v){return parseInt(v);}).filter(Boolean).sort(function(a,b){return a-b;});}
 function paramMetodos(){return GP().metodosPagamento||[];}
@@ -569,34 +821,7 @@ function metodoOptions(selected,emptyLabel){return optionList(paramMetodos(),sel
 function nivelOptions(selected){return optionList(paramNiveis(),selected);}
 
 function salvarValorPlano(nome,v){var cfg=GP();var i=cfg.planos.findIndex(function(p){return p.nome===nome;});if(i<0)return;cfg.planos[i].valor=parseFloat(v)||0;DB.set('parametros',cfg);addLog('edit_plano',{nome:nome});toast('Salvo!','s');}
-function initDB(){
-  if(!DB.get('init_v7')){
-    const a=ALUNOS_SEED.slice();
-    if(!a.find(x=>x.email===GESTOR_DEFAULT.email)) a.unshift(GESTOR_DEFAULT);
-    DB.set('alunos',a);
-    DB.set('checkins',[]);
-    DB.set('turmas',[]);
-    DB.set('logs',[]);
-    DB.set('solicitacoes',[]);
-    DB.set('repos_creditos',[]);
-    DB.set('parametros',cloneObj(PARAMETROS_DEFAULT));
-    
-    DB.set('turmashor_config',{"Iniciante": {"Segunda": ["08:00", "18:00"], "Terca": ["06:00", "08:00", "18:00"], "Quarta": ["08:00", "18:00"], "Quinta": ["06:00", "08:00", "18:00"], "Sexta": ["08:00"]}, "Intermediario": {"Segunda": ["06:00", "17:00"], "Terca": ["07:00", "17:00"], "Quarta": ["06:00", "17:00"], "Quinta": ["07:00", "17:00"], "Sexta": ["06:00"]}, "Avancado": {"Segunda": ["07:00"], "Terca": ["09:00"], "Quarta": ["07:00"], "Quinta": ["09:00"], "Sexta": ["07:00"]}});
-    DB.set('init_v7',true);
-  }
-}
-
-const GA=()=>DB.get('alunos',[]);
-const SA=(a)=>DB.set('alunos',a);
-const GC=()=>DB.get('checkins',[]);
-const SC=(c)=>DB.set('checkins',c);
-const GT=()=>DB.get('turmas',[]);
-const ST=(t)=>DB.set('turmas',t);
-const GL=()=>DB.get('logs',[]);
-const GS=()=>DB.get('solicitacoes',[]);
-const SS=(s)=>DB.set('solicitacoes',s);
-const GR=()=>DB.get('repos_creditos',[]);
-const SR=(r)=>DB.set('repos_creditos',r);
+// initDB e GA/SA/GC/SC/GT/ST/GL/GS/SS/GR/SR definidos no bloco Supabase acima
 
 function statusEfetivo(a){
   if(!a)return '';
@@ -675,12 +900,7 @@ function alertaPerfilAluno(a){
   }
   return html;
 }
-function addLog(action,dados){
-  const logs=GL();
-  logs.push({ts:new Date().toISOString(),action,dados,user:CU?.nome||'?'});
-  if(logs.length>3000)logs.splice(0,logs.length-3000);
-  DB.set('logs',logs);
-}
+// addLog definido no bloco Supabase acima
 
 /* == AUTH == */
 let CU=null;
