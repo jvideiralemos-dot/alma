@@ -1784,7 +1784,7 @@ function renderTurmasCI(){
   var meusCIs=cis.filter(function(c){return c.dia===dia&&c.userId===CU.id&&c.status!=='cancelado';});
 
   var avisoSaldo='';
-  if(!isG()&&controlaSaldoAluno(CU)&&!isPacote(CU)){
+  if(!isG()&&saldo!==999){
     var cor=saldo<=0?'alerta-r':saldo<=2?'alerta-a':'alerta-g';
     avisoSaldo='<div class="alerta '+cor+'" style="margin-bottom:12px">Saldo disponÃ­vel: <strong>'+saldo+' aula'+(saldo!==1?'s':'')+'</strong></div>';
   }
@@ -3047,19 +3047,20 @@ function tipoCheckinParaAluno(aluno,dia){
   if(repos)return 'repos';
   return '';
 }
-function saldoCheckinDisponivel(aluno,dia){
+function saldoTotalAulasAluno(aluno){
+  if(!aluno)return 0;
   expirarReposicoes(aluno);
-  if(!controlaSaldoAluno(aluno))return 999;
-  var tipo=tipoCheckinParaAluno(aluno,dia);
-  if(!tipo)return 0;
-  if(tipo==='awa')tipo='normal';
-  if(tipo==='pacote')return aluno.pacoteAulas||0;
-  if(tipo==='avulsa')return avulsasDisponiveisAluno(aluno).length;
   var aulasDir=calcSaldoPeriodo(aluno);
   var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade);
   var saldoPlano=Math.max(0,aulasDir-usadas);
-  if(!isSabado(dia))saldoPlano+=reposicoesDisponiveisAluno(aluno).length;
-  return tipo==='repos'?reposicoesDisponiveisAluno(aluno).length:saldoPlano;
+  var repos=reposicoesDisponiveisAluno(aluno).length;
+  var avulsas=avulsasDisponiveisAluno(aluno).length;
+  var pacote=parseInt(aluno.pacoteAulas)||0;
+  return saldoPlano+repos+avulsas+pacote;
+}
+function saldoCheckinDisponivel(aluno,dia){
+  if(!controlaSaldoAluno(aluno)&&!isPacote(aluno)&&!isAvulsa(aluno)&&(parseInt(aluno&&aluno.pacoteAulas)||0)<=0&&!avulsasDisponiveisAluno(aluno||{}).length&&!reposicoesDisponiveisAluno(aluno||{}).length)return 999;
+  return saldoTotalAulasAluno(aluno);
 }
 function geradoEmReposicaoPeriodoAnterior(aluno){
   var v=parseInt(aluno&&aluno.vencMensalidade)||3;
@@ -3132,9 +3133,8 @@ function calcSaldoPeriodo(aluno){
 }
 function checkinsNoPeriodo(alunoId,venc){return checkinsPlanoNoPeriodo(alunoId,venc);}
 function saldoDisponivel(aluno){
-  if(!controlaSaldoAluno(aluno))return 999;
-  expirarReposicoes(aluno);
-  return saldoCheckinDisponivel(aluno,hoje());
+  if(!controlaSaldoAluno(aluno)&&!isPacote(aluno)&&!isAvulsa(aluno)&&(parseInt(aluno&&aluno.pacoteAulas)||0)<=0&&!avulsasDisponiveisAluno(aluno||{}).length&&!reposicoesDisponiveisAluno(aluno||{}).length)return 999;
+  return saldoTotalAulasAluno(aluno);
 }
 function expirarReposicoes(aluno){
   var v=parseInt(aluno.vencMensalidade)||3;
@@ -3719,6 +3719,8 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
+
+
 
 
 
