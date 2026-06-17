@@ -418,7 +418,7 @@ async function sbFetch(path, options={}) {
     'Prefer': options.prefer || 'return=representation',
     ...( options.headers || {} )
   };
-  const res = await fetch(url, { method: options.method || 'GET', headers, body: options.body ? JSON.stringify(options.body) : undefined });
+  const res = await fetch(url, { method: options.method || 'GET', headers, body: options.body ? JSON.stringify(options.body) : undefined, mode: 'cors' });
   if (!res.ok) { const t = await res.text(); console.error('Supabase erro:', res.status, t); return null; }
   if (res.status === 204) return [];
   return res.json();
@@ -608,6 +608,8 @@ async function initDB() {
     _cache.solicitacoes = sols;
     _cache.repos = repos;
     _cache.logs = [];
+    // Salvar cache local para fallback
+    if (alunos && alunos.length) DB.set('alunos_cache', alunos);
 
     // Se banco vazio, popular com seed
     if (!alunos.find(a => a.email === GESTOR_DEFAULT.email)) {
@@ -629,7 +631,16 @@ async function initDB() {
 
   } catch(e) {
     console.error('Erro ao carregar dados:', e);
-    alert('Erro ao conectar ao banco de dados. Verifique sua conexão e recarregue a página.');
+    // Fallback: tentar usar dados do localStorage se existirem
+    if (!_cache.alunos || !_cache.alunos.length) {
+      const fallback = DB.get('alunos_cache');
+      if (fallback && fallback.length) {
+        _cache.alunos = fallback;
+        console.warn('Usando cache local — Supabase indisponível');
+      } else {
+        alert('Erro ao conectar ao banco de dados. Verifique sua conexão e recarregue a página.\n\n' + e.message);
+      }
+    }
   }
 
   // Remover loading
@@ -3358,7 +3369,7 @@ function solicitarAlteracaoPlano(){
 
 /* == INIT == */
 // Para resetar manualmente: localStorage.clear() no console do browser
-initDB();
+initDB().catch(function(e){console.error("initDB falhou:",e);});
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&document.getElementById('login-screen')&&!document.getElementById('login-screen').classList.contains('hidden'))
     login();
