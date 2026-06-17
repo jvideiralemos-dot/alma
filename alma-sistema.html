@@ -436,9 +436,64 @@ const DB={
 };
 
 /* == FUNÇÕES ASYNC DE DADOS == */
+const ALUNO_FIELD_MAP={
+  databasealunos:'databaseAlunos',
+  vencmensalidade:'vencMensalidade',
+  diassemana:'diasSemana',
+  metodopagamento:'metodoPagamento',
+  pacoteaulas:'pacoteAulas',
+  fotoslink:'fotosLink',
+  comoconheceu:'comoConheceu',
+  motivoinativo:'motivoInativo',
+  pacoteexpira:'pacoteExpira',
+  permitireditarhorarios:'permitirEditarHorarios',
+  horariosalteracaoaprovada:'horariosAlteracaoAprovada',
+  pausainicioem:'pausaInicioEm',
+  matriculaviasite:'matriculaViaSite'
+};
+const ALUNO_DB_FIELDS=['id','timestamp','nome','email','senha','cpf','telefone','nascimento','genero','nivel','plano','databasealunos','vencmensalidade','diassemana','horarios','status','perfil','metodopagamento','observacao','pacoteaulas','aulas_repos','aulas_avulsas','fotoslink','checkinliberado','ct','comoconheceu','motivoinativo','pacoteexpira','permitireditarhorarios','horariosalteracaoaprovada','pausainicioem','matriculaviasite','subcategoria'];
+function alunoFromDb(row){
+  const out={...(row||{})};
+  Object.entries(ALUNO_FIELD_MAP).forEach(([db,app])=>{
+    if(out[db]!==undefined&&out[app]===undefined)out[app]=out[db];
+  });
+  return out;
+}
+function alunoToDb(aluno){
+  const src=aluno||{};
+  const out={};
+  ALUNO_DB_FIELDS.forEach(function(db){
+    const app=ALUNO_FIELD_MAP[db]||db;
+    if(src[app]!==undefined)out[db]=src[app];
+    else if(src[db]!==undefined)out[db]=src[db];
+  });
+  return out;
+}
+const SOL_FIELD_MAP={
+  userid:'userId',
+  nomealuno:'nomeAluno',
+  planoescolhido:'planoEscolhido',
+  comprovantenome:'comprovanteNome'
+};
+function solFromDb(row){
+  const out={...(row||{})};
+  Object.entries(SOL_FIELD_MAP).forEach(([db,app])=>{
+    if(out[db]!==undefined&&out[app]===undefined)out[app]=out[db];
+  });
+  return out;
+}
+function solToDb(sol){
+  const src=sol||{};
+  const out={...src};
+  Object.entries(SOL_FIELD_MAP).forEach(([db,app])=>{
+    if(src[app]!==undefined){out[db]=src[app];delete out[app];}
+  });
+  return out;
+}
+
 async function fetchAlunos() {
   const d = await sbFetch('alunos?order=nome');
-  return d || [];
+  return (d || []).map(alunoFromDb);
 }
 async function fetchCheckins() {
   const d = await sbFetch('checkins?order=ts.desc&limit=2000');
@@ -450,7 +505,7 @@ async function fetchTurmas() {
 }
 async function fetchSolicitacoes() {
   const d = await sbFetch('solicitacoes?order=ts.desc&limit=500');
-  return d || [];
+  return (d || []).map(solFromDb);
 }
 async function fetchRepos() {
   const d = await sbFetch('repos_creditos?order=geradoEm.desc&limit=500');
@@ -459,7 +514,7 @@ async function fetchRepos() {
 
 async function upsertAluno(aluno) {
   await sbFetch('alunos?id=eq.' + aluno.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('alunos', { method: 'POST', body: aluno });
+  return sbFetch('alunos', { method: 'POST', body: alunoToDb(aluno) });
 }
 async function upsertCheckin(ci) {
   await sbFetch('checkins?id=eq.' + ci.id, { method: 'DELETE', prefer: 'return=minimal' });
@@ -471,7 +526,7 @@ async function upsertTurma(t) {
 }
 async function upsertSolicitacao(s) {
   await sbFetch('solicitacoes?id=eq.' + s.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('solicitacoes', { method: 'POST', body: s });
+  return sbFetch('solicitacoes', { method: 'POST', body: solToDb(s) });
 }
 async function upsertRepo(r) {
   await sbFetch('repos_creditos?id=eq.' + r.id, { method: 'DELETE', prefer: 'return=minimal' });
@@ -619,7 +674,7 @@ async function initDB() {
       // Inserir em lotes de 50
       for (let i = 0; i < seed.length; i += 50) {
         const lote = seed.slice(i, i + 50);
-        await sbFetch('alunos', { method: 'POST', body: lote, prefer: 'return=minimal' });
+        await sbFetch('alunos', { method: 'POST', body: lote.map(alunoToDb), prefer: 'return=minimal' });
       }
       _cache.alunos = await fetchAlunos();
     }
@@ -936,7 +991,8 @@ function toggleLoginSenha(){
   let u=GA().find(matchUser);
   if(!u&&em){
     try{
-      const rows=await sbFetch('alunos?email=eq.'+encodeURIComponent(em)+'&select=*');
+      const rowsRaw=await sbFetch('alunos?email=eq.'+encodeURIComponent(em)+'&select=*');
+      const rows=(rowsRaw||[]).map(alunoFromDb);
       if(rows&&rows.length){
         const alunos=GA().slice();
         rows.forEach(function(row){
@@ -1294,7 +1350,7 @@ function modalNovoAluno(){
     <div class="fg"><label>CPF</label><input id="na-cpf" maxlength="11"></div>
     <div class="fg"><label>Telefone</label><input id="na-tel"></div>
     <div class="fg"><label>Nascimento</label><input id="na-nasc" type="date"></div>
-    <div class="fg"><label>Gênero</label><select id="na-gen"><option value="">—</option><option value="F">Feminino</option><option value="M">Masculino</option></select></div>
+    <div class="fg"><label>Gênero</label><select id="na-gen"><option value="">—</option><option value="Feminino">Feminino</option><option value="Masculino">Masculino</option></select></div>
     <div class="fg"><label>Nível</label><input value="${esc(nivelInicial)}" disabled style="background:var(--sand);color:var(--muted);font-size:.82rem"><small style="color:var(--muted);font-size:.70rem">Nível inicial definido em Parâmetros</small></div>
     <div class="fg"><label>Plano</label><select id="na-plano">${planoOptions('', 'Sem plano')}</select></div>
     <div class="fg"><label>Vencimento</label><select id="na-venc">${vencOptions('', '—')}</select></div>
@@ -1368,7 +1424,7 @@ function modalEditAluno(id){
     +'<div class="fg"><label>CPF</label><input id="ea-cpf" value="'+esc(a.cpf)+'" maxlength="11"></div>'
     +'<div class="fg"><label>Telefone</label><input id="ea-tel" value="'+esc(a.telefone)+'"></div>'
     +'<div class="fg"><label>Nascimento</label><input id="ea-nasc" type="date" value="'+esc(a.nascimento)+'"></div>'
-    +'<div class="fg"><label>Genero</label><select id="ea-gen"><option value="F" '+(a.genero==='F'?'selected':'')+'>Feminino</option><option value="M" '+(a.genero==='M'?'selected':'')+'>Masculino</option></select></div>'
+    +'<div class="fg"><label>Genero</label><select id="ea-gen"><option value="Feminino" '+((a.genero==='Feminino'||a.genero==='F')?'selected':'')+'>Feminino</option><option value="Masculino" '+((a.genero==='Masculino'||a.genero==='M')?'selected':'')+'>Masculino</option></select></div>'
     +'<div class="fg"><label>Nivel</label><select id="ea-niv" '+(isG()?'':'disabled')+'>'+nivelOptions(a.nivel)+'</select></div>'
     +'<div class="fg"><label>Plano</label><select id="ea-plano">'+planoOpts+'</select></div>'
     +'<div class="fg"><label>Vencimento</label><select id="ea-venc">'+vencOptions(a.vencMensalidade,'--')+'</select></div>'
