@@ -428,7 +428,7 @@ async function sbFetch(path, options={}) {
 const _cache = {};
 const _dirty = {};
 
-/* == STORAGE (localStorage para session/parametros/config, Supabase para dados) == */
+/* == STORAGE (localStorage para sessao/cache; Supabase para dados e configuracoes) == */
 const DB={
   get:(k,d=null)=>{try{const v=localStorage.getItem('alma_'+k);return v!==null?JSON.parse(v):d}catch{return d}},
   set:(k,v)=>localStorage.setItem('alma_'+k,JSON.stringify(v)),
@@ -519,6 +519,21 @@ async function fetchSolicitacoes() {
 async function fetchRepos() {
   const d = await sbFetch('repos_creditos?order=geradoEm.desc&limit=500');
   return d || [];
+}
+async function fetchParametro(id) {
+  const d = await sbFetch('parametros?id=eq.' + encodeURIComponent(id) + '&select=dados&limit=1');
+  return d && d[0] ? d[0].dados : null;
+}
+async function upsertParametro(id, dados) {
+  await sbFetch('parametros?id=eq.' + encodeURIComponent(id), { method: 'DELETE', prefer: 'return=minimal' });
+  return sbFetch('parametros', { method: 'POST', body: { id: id, dados: dados }, prefer: 'return=minimal' });
+}
+function salvarParametroSupabase(id, dados) {
+  DB.set(id, dados);
+  (async function(){
+    try { await upsertParametro(id, dados); }
+    catch(e) { console.warn('parametros sync err', id, e); }
+  })();
 }
 
 async function upsertAluno(aluno) {
@@ -638,8 +653,8 @@ async function addLog(action, dados) {
   } catch(e) { console.warn('log err', e); }
 }
 
-/* == PARAMETROS (localStorage) == */
-function SP(cfg) { DB.set('parametros', cfg); }
+/* == PARAMETROS (Supabase + cache local) == */
+function SP(cfg) { salvarParametroSupabase('parametros', cfg); }
 
 /* == INIT == */
 async function initDB() {
@@ -662,8 +677,9 @@ async function initDB() {
 
   try {
     // Carregar todos os dados em paralelo
-    const [alunos, checkins, turmas, sols, repos] = await Promise.all([
-      fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos()
+    const [alunos, checkins, turmas, sols, repos, cfgParametros, cfgTurmasHor, cfgInadimplentes] = await Promise.all([
+      fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos(),
+      fetchParametro('parametros'), fetchParametro('turmashor_config'), fetchParametro('inadimplentes')
     ]);
 
     _cache.alunos = alunos;
@@ -672,6 +688,12 @@ async function initDB() {
     _cache.solicitacoes = sols;
     _cache.repos = repos;
     _cache.logs = [];
+    if (cfgParametros && typeof cfgParametros === 'object') DB.set('parametros', cfgParametros);
+    else if (DB.get('parametros')) SP(DB.get('parametros'));
+    if (cfgTurmasHor && typeof cfgTurmasHor === 'object') DB.set('turmashor_config', cfgTurmasHor);
+    else if (DB.get('turmashor_config')) salvarParametroSupabase('turmashor_config', DB.get('turmashor_config'));
+    if (Array.isArray(cfgInadimplentes)) DB.set('inadimplentes', cfgInadimplentes);
+    else if (DB.get('inadimplentes')) salvarParametroSupabase('inadimplentes', DB.get('inadimplentes'));
     // Salvar cache local para fallback
     if (alunos && alunos.length) DB.set('alunos_cache', alunos);
 
@@ -688,9 +710,9 @@ async function initDB() {
       _cache.alunos = await fetchAlunos();
     }
 
-    // Parâmetros no localStorage se não existirem
+    // Parâmetros no Supabase/cache se não existirem
     if (!DB.get('parametros')) {
-      DB.set('parametros', cloneObj(PARAMETROS_DEFAULT));
+      SP(cloneObj(PARAMETROS_DEFAULT));
     }
 
   } catch(e) {
@@ -810,7 +832,7 @@ function salvarTurmasHor(nivel){
     var val=inp.value.trim();
     config[key][dia]=val?val.split(',').map(function(h){return h.trim();}).filter(Boolean):[];
   });
-  DB.set('turmashor_config',config);
+  salvarParametroSupabase('turmashor_config',config);
   addLog('edit_turmashor',{nivel:nivel});
   toast('Horários do '+nivel+' salvos!','s');
 }
@@ -860,7 +882,7 @@ function ensureParametros(){
   cfg.regras=Object.assign({},d.regras,cfg.regras||{});
   cfg.regras.textos=Object.assign({},d.regras.textos,cfg.regras.textos||{});
   cfg.regras.saldoStatusPrazos=Object.assign({},d.regras.saldoStatusPrazos,cfg.regras.saldoStatusPrazos||{});
-  if(changed)DB.set('parametros',cfg);
+  if(changed)SP(cfg);
   return cfg;
 }
 function GP(){return ensureParametros();}
@@ -902,7 +924,7 @@ function vencOptions(selected,emptyLabel){
 function metodoOptions(selected,emptyLabel){return optionList(paramMetodos(),selected,emptyLabel);}
 function nivelOptions(selected){return optionList(paramNiveis(),selected);}
 
-function salvarValorPlano(nome,v){var cfg=GP();var i=cfg.planos.findIndex(function(p){return p.nome===nome;});if(i<0)return;cfg.planos[i].valor=parseFloat(v)||0;DB.set('parametros',cfg);addLog('edit_plano',{nome:nome});toast('Salvo!','s');}
+function salvarValorPlano(nome,v){var cfg=GP();var i=cfg.planos.findIndex(function(p){return p.nome===nome;});if(i<0)return;cfg.planos[i].valor=parseFloat(v)||0;SP(cfg);addLog('edit_plano',{nome:nome});toast('Salvo!','s');}
 // initDB e GA/SA/GC/SC/GT/ST/GL/GS/SS/GR/SR definidos no bloco Supabase acima
 
 function statusEfetivo(a){
@@ -2809,7 +2831,7 @@ function closeSidebar(){
 
 /* == INADIMPLÊNCIA == */
 function getInadimplentes(){ return DB.get('inadimplentes',[]); }
-function setInadimplentes(d){ DB.set('inadimplentes',d); }
+function setInadimplentes(d){ salvarParametroSupabase('inadimplentes',d); }
 
 function isInadimplente(userId){
   var aluno=GA().find(function(a){return a.id===userId;});
@@ -3719,6 +3741,10 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
+
+
+
+
 
 
 
