@@ -569,7 +569,7 @@ const GA = () => _cache.alunos || [];
 const SA = (arr) => {
   // Detectar quais alunos mudaram e salvar no Supabase em background
   const prev = _cache.alunos || [];
-  const changed = arr.filter(a => {
+  const changed = arr === prev ? arr : arr.filter(a => {
     const p = prev.find(x => x.id === a.id);
     return !p || JSON.stringify(p) !== JSON.stringify(a);
   });
@@ -583,7 +583,7 @@ const SA = (arr) => {
 const GC = () => _cache.checkins || [];
 const SC = (arr) => {
   const prev = _cache.checkins || [];
-  const changed = arr.filter(c => {
+  const changed = arr === prev ? arr : arr.filter(c => {
     const p = prev.find(x => x.id === c.id);
     return !p || JSON.stringify(p) !== JSON.stringify(c);
   });
@@ -602,7 +602,7 @@ const SC = (arr) => {
 const GT = () => _cache.turmas || [];
 const ST = (arr) => {
   const prev = _cache.turmas || [];
-  const changed = arr.filter(t => {
+  const changed = arr === prev ? arr : arr.filter(t => {
     const p = prev.find(x => x.id === t.id);
     return !p || JSON.stringify(p) !== JSON.stringify(t);
   });
@@ -616,7 +616,7 @@ const ST = (arr) => {
 const GS = () => _cache.solicitacoes || [];
 const SS = (arr) => {
   const prev = _cache.solicitacoes || [];
-  const changed = arr.filter(s => {
+  const changed = arr === prev ? arr : arr.filter(s => {
     const p = prev.find(x => x.id === s.id);
     return !p || JSON.stringify(p) !== JSON.stringify(s);
   });
@@ -630,7 +630,7 @@ const SS = (arr) => {
 const GR = () => _cache.repos || [];
 const SR = (arr) => {
   const prev = _cache.repos || [];
-  const changed = arr.filter(r => {
+  const changed = arr === prev ? arr : arr.filter(r => {
     const p = prev.find(x => x.id === r.id);
     return !p || JSON.stringify(p) !== JSON.stringify(r);
   });
@@ -1408,12 +1408,16 @@ function saveNovoAluno(){
   var email=document.getElementById('na-email').value.trim();
   if(!nome||!email){toast('Nome e e-mail obrigatórios','e');return;}
   var alunos=GA();
-  if(alunos.find(function(a){return a.email.toLowerCase()===email.toLowerCase();})){toast('E-mail já cadastrado','e');return;}
+  if(alunos.find(function(a){return String(a.email||'').toLowerCase()===email.toLowerCase();})){toast('E-mail já cadastrado','e');return;}
+  var cpfNovo=document.getElementById('na-cpf').value.replace(/\D/g,'');
+  if(cpfNovo&&cpfNovo.length<11)cpfNovo=cpfNovo.padStart(11,'0');
+  if(cpfNovo&&cpfNovo.length!==11){toast('CPF inválido','e');return;}
+  if(cpfNovo&&alunos.find(function(a){return String(a.cpf||'').replace(/\D/g,'')===cpfNovo;})){toast('CPF já cadastrado','e');return;}
   var dh=getDiasHorariosValue('na');
   var novo={
     id:'a'+Date.now(),nome,email,
-    senha:(function(){var c=document.getElementById('na-cpf').value.replace(/\D/g,'');return c||document.getElementById('na-senha').value||paramRegras().senhaPadrao||'123456';})(),
-    cpf:document.getElementById('na-cpf').value.replace(/\D/g,'').padStart(11,'0'),
+    senha:cpfNovo||document.getElementById('na-senha').value||paramRegras().senhaPadrao||'123456',
+    cpf:cpfNovo,
     telefone:document.getElementById('na-tel').value,
     nascimento:document.getElementById('na-nasc').value,
     genero:document.getElementById('na-gen').value,
@@ -1529,9 +1533,15 @@ function saveEditAluno(id){
   var alunos=GA();var idx=alunos.findIndex(function(a){return a.id===id;});if(idx<0)return;
   var a=alunos[idx];
   var dh=getDiasHorariosValue('ea');
+  var emailNovo=document.getElementById('ea-email').value.trim()||a.email;
+  var cpfNovo=document.getElementById('ea-cpf').value.replace(/\D/g,'');
+  if(cpfNovo&&cpfNovo.length<11)cpfNovo=cpfNovo.padStart(11,'0');
+  if(cpfNovo&&cpfNovo.length!==11){toast('CPF inválido','e');return;}
+  if(alunos.find(function(x){return x.id!==id&&String(x.email||'').toLowerCase()===emailNovo.toLowerCase();})){toast('E-mail já cadastrado em outro aluno','e');return;}
+  if(cpfNovo&&alunos.find(function(x){return x.id!==id&&String(x.cpf||'').replace(/\D/g,'')===cpfNovo;})){toast('CPF já cadastrado em outro aluno','e');return;}
   a.nome=document.getElementById('ea-nome').value.trim()||a.nome;
-  a.email=document.getElementById('ea-email').value.trim()||a.email;
-  a.cpf=document.getElementById('ea-cpf').value.replace(/\D/g,'');
+  a.email=emailNovo;
+  a.cpf=cpfNovo;
   a.telefone=document.getElementById('ea-tel').value;
   a.nascimento=document.getElementById('ea-nasc').value;
   a.genero=document.getElementById('ea-gen').value;
@@ -1789,7 +1799,7 @@ function renderTurmasCI(){
   }
 
   // Turmas visíveis pela categoria
-  var niveis=isG()?null:niveisVisiveis(CU.nivel);
+  var niveis=isG()?null:niveisVisiveis(CU);
 
   var turmasFiltradas=turmas.filter(function(t){
     if(isG())return true;
@@ -2424,26 +2434,46 @@ function renderLista(){
         +'</div>'
         +(vagas?'<div class="prog" style="width:140px;margin:0"><div class="prog-fill'+(pct>=100?' full':'')+'" style="width:'+pct+'%"></div></div>':'')
       +'</div>'
-      +'<div style="padding:4px 0">'
-      +grupo.map(function(c,i){
-        var aluno=GA().find(function(a){return a.id===c.userId;});
-        var nivel=aluno?.nivel||'—';
-        var subcat=aluno?.subcategoria||'';
-        var nivelCls=nivel.toLowerCase().includes('avan')?'b-avancado':nivel.toLowerCase().includes('interm')?'b-intermediario':'b-iniciante';
-        return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 18px;border-bottom:1px solid rgba(0,0,0,.03)">'
-          +'<div style="display:flex;align-items:center;gap:10px">'
-            +'<span style="font-size:.70rem;color:var(--muted);width:18px;text-align:right">'+(i+1)+'.</span>'
-            +'<div>'
-              +'<span style="font-size:.86rem;font-weight:500">'+c.nomeAluno+'</span>'
-              +(aluno?.telefone?' <span style="font-size:.72rem;color:var(--muted)">'+aluno.telefone+'</span>':'')
+      +'<div style="padding:8px 0">'
+      +(function(){
+        var porSub={};
+        grupo.forEach(function(c){
+          var aluno=GA().find(function(a){return a.id===c.userId;});
+          var sub=String(aluno&&aluno.subcategoria||'').trim()||'sem';
+          if(!porSub[sub])porSub[sub]=[];
+          porSub[sub].push(c);
+        });
+        var ordem=Object.keys(porSub).sort(function(a,b){
+          if(a==='sem')return 1;
+          if(b==='sem')return -1;
+          return (parseInt(a)||9)-(parseInt(b)||9);
+        });
+        return ordem.map(function(sub){
+          var lista=porSub[sub].sort(function(a,b){return a.nomeAluno>b.nomeAluno?1:-1;});
+          var label=sub==='sem'?'Sem subcategoria':'Subcategoria '+sub;
+          return '<div style="padding:8px 18px 4px;border-top:1px solid rgba(0,0,0,.04)">'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">'
+              +'<span class="badge '+(sub==='sem'?'b-inativa':'b-gestor')+'" style="font-size:.66rem">'+label+'</span>'
+              +'<span style="font-size:.72rem;color:var(--muted)">'+lista.length+' aluno'+(lista.length!==1?'s':'')+'</span>'
             +'</div>'
-          +'</div>'
-          +'<div style="display:flex;align-items:center;gap:5px">'
-            +'<span class="badge '+nivelCls+'" style="font-size:.65rem">'+nivel+'</span>'
-            +(subcat&&isG()?'<span class="badge b-gestor" style="font-size:.65rem">Sub '+subcat+'</span>':'')
-          +'</div>'
-        +'</div>';
-      }).join('')
+            +lista.map(function(c,i){
+              var aluno=GA().find(function(a){return a.id===c.userId;});
+              var nivel=aluno?.nivel||'—';
+              var nivelCls=nivel.toLowerCase().includes('avan')?'b-avancado':nivel.toLowerCase().includes('interm')?'b-intermediario':'b-iniciante';
+              return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.03)">'
+                +'<div style="display:flex;align-items:center;gap:10px">'
+                  +'<span style="font-size:.70rem;color:var(--muted);width:18px;text-align:right">'+(i+1)+'.</span>'
+                  +'<div>'
+                    +'<span style="font-size:.86rem;font-weight:500">'+c.nomeAluno+'</span>'
+                    +(aluno?.telefone?' <span style="font-size:.72rem;color:var(--muted)">'+aluno.telefone+'</span>':'')
+                  +'</div>'
+                +'</div>'
+                +'<span class="badge '+nivelCls+'" style="font-size:.65rem">'+nivel+'</span>'
+              +'</div>';
+            }).join('')
+          +'</div>';
+        }).join('');
+      })()
       +'</div></div>';
   });
   el.innerHTML=html;
@@ -3122,9 +3152,11 @@ function sincronizarCreditosGestao(aluno,qtdAvulsas,qtdRepos){
 }
 function isSabado(diaStr){if(!diaStr)return false;var d=new Date(diaStr+'T12:00:00');return d.getDay()===6;}
 function controlaSaldoAluno(a){if(a&&(a.perfil==='Parceiro'||a.perfil==='Matina'))return false;var lista=(paramCheckin().controlarSaldoNiveis||[]).map(function(n){return cleanKey(n);});var nivel=cleanKey(a&&a.nivel||'');return !nivel||lista.some(function(n){return nivel.includes(n)||n.includes(nivel);});}
-function niveisVisiveis(nivel){
+function niveisVisiveis(alunoOuNivel){
+  var perfil=typeof alunoOuNivel==='object'?String(alunoOuNivel&&alunoOuNivel.perfil||''):'';
+  var nivel=typeof alunoOuNivel==='object'?alunoOuNivel.nivel:alunoOuNivel;
   var n=(nivel||'').toLowerCase();
-  if(n.includes('avan')) return ['Avancado','Avançado','Intermediario','Intermediário','Iniciante'];
+  if(perfil==='Matina'||n.includes('avan')) return ['Avancado','Avançado','Intermediario','Intermediário','Iniciante'];
   if(n.includes('interm')) return ['Intermediario','Intermediário','Iniciante'];
   return ['Iniciante'];
 }
@@ -3227,8 +3259,10 @@ function vencimentoDefaultMatricula(dataRef){
 
 function registrarMatriculaPendente(dados){
   var alunos=GA();
-  if(alunos.find(function(a){return a.email.toLowerCase()===(dados.email||'').toLowerCase();})){return{ok:false,msg:'Email ja cadastrado'};}
   var cpfLimpo=(dados.cpf||'').replace(/\D/g,'');
+  if(cpfLimpo&&cpfLimpo.length<11)cpfLimpo=cpfLimpo.padStart(11,'0');
+  if(alunos.find(function(a){return String(a.email||'').toLowerCase()===(dados.email||'').toLowerCase();})){return{ok:false,msg:'Email ja cadastrado'};}
+  if(cpfLimpo&&alunos.find(function(a){return String(a.cpf||'').replace(/\D/g,'')===cpfLimpo;})){return{ok:false,msg:'CPF ja cadastrado'};}
   var novo={id:'a'+Date.now(),nome:dados.nome,email:dados.email,senha:cpfLimpo||paramRegras().senhaPadrao||'123456',cpf:cpfLimpo,telefone:dados.telefone||'',nascimento:dados.nascimento||'',genero:dados.genero||'',nivel:'Iniciante',plano:'',databaseAlunos:dados.plano||'',vencMensalidade:dados.vencimento||'',diasSemana:'',horarios:'',status:'Aguardando Aprovação',perfil:'Aluno',metodoPagamento:dados.metodoPagamento||'',observacao:'Matricula via site',pacoteAulas:0,aulas_avulsas:0,aulas_repos:0,fotosLink:'',checkinLiberado:false,timestamp:new Date().toISOString()};
   alunos.push(novo);SA(alunos);
   var sols=GS();
@@ -3273,7 +3307,8 @@ function renderMeusDias(el, u){
   var diasDisp = diasPermitidos(plano);
   var selDias = (u.diasSemana||'').split(',').map(function(d){return d.trim();}).filter(Boolean);
   var selHors = (u.horarios||'').split(',').map(function(h){return h.trim();}).filter(Boolean);
-  var bloqueado = !!(maxD && selDias.length && selHors.length===maxD && !u.permitirEditarHorarios);
+  var cadastroPendente = statusEfetivo(u)==='Aguardando Aprovação';
+  var bloqueado = !!(maxD && selDias.length && selHors.length===maxD && !u.permitirEditarHorarios && !cadastroPendente);
 
   // Pacote / Avulso / sem plano dias: não precisa escolher
   if(!temDias||!maxD){
@@ -3298,7 +3333,7 @@ function renderMeusDias(el, u){
 
   var html='<div class="alerta alerta-b" style="margin-bottom:14px">'
     +'Plano <strong>'+plano+'</strong> · selecione até <strong>'+maxD+' horário'+(maxD!==1?'s':'')+'</strong> por semana.'
-    +'<br><small style="opacity:.8">'+(bloqueado?'Seus dias e horários já estão salvos. Para mudar, envie uma solicitação.':'Pode escolher mais de um horário no mesmo dia se o plano permitir.')+'</small>'
+    +'<br><small style="opacity:.8">'+(bloqueado?'Seus dias e horários já estão salvos. Para mudar, envie uma solicitação.':cadastroPendente?'Enquanto seu cadastro está em análise, você pode corrigir seus dias e horários livremente.':'Pode escolher mais de um horário no mesmo dia se o plano permitir.')+'</small>'
     +'</div>';
   html+='<div style="display:flex;flex-direction:column;gap:10px" id="meusdias-wrap">';
 
@@ -3385,7 +3420,8 @@ function salvarMeusDias(){
   var alunos=GA();var idx=alunos.findIndex(function(a){return a.id===CU.id;});if(idx<0)return;
   var maxH=maxDiasSemana(alunos[idx].databaseAlunos||alunos[idx].plano||'');
   var jaCompleto=maxH&&listaCampo(alunos[idx].horarios).length===maxH&&listaCampo(alunos[idx].diasSemana).length>0;
-  if(jaCompleto&&!alunos[idx].permitirEditarHorarios){toast('Seus dias e horários já estão salvos. Solicite alteração para mudar.','w');return;}
+  var cadastroPendente=statusEfetivo(alunos[idx])==='Aguardando Aprovação';
+  if(jaCompleto&&!alunos[idx].permitirEditarHorarios&&!cadastroPendente){toast('Seus dias e horários já estão salvos. Solicite alteração para mudar.','w');return;}
   var diasEls=[...document.querySelectorAll('.meusdias-dia:checked')];
   var horEls=[...document.querySelectorAll('.meusdias-hor:checked')];
   if(maxH&&horEls.length!==maxH){toast('Selecione exatamente '+maxH+' horário'+(maxH!==1?'s':'')+' para o seu plano','e');return;}
@@ -3393,11 +3429,13 @@ function salvarMeusDias(){
   var hors=horEls.map(function(c){return c.value;}).join(', ');
   alunos[idx].diasSemana=dias;
   alunos[idx].horarios=hors;
-  alunos[idx].permitirEditarHorarios=false;
-  alunos[idx].horariosAlteracaoAprovada=false;
+  if(!cadastroPendente){
+    alunos[idx].permitirEditarHorarios=false;
+    alunos[idx].horariosAlteracaoAprovada=false;
+  }
   CU=alunos[idx];SA(alunos);
   addLog('edit_dias',{dias:dias,hors:hors});
-  toast('Dias e horários salvos e travados!','s');
+  toast(cadastroPendente?'Dias e horários salvos. Você ainda pode corrigir enquanto o cadastro estiver em análise.':'Dias e horários salvos e travados!','s');
   pgPerfil(document.getElementById('main-content'));
   tabPerfil('meusdias',document.getElementById('ptab-meusdias'));
 }
@@ -3658,6 +3696,7 @@ function pgRegras(el){
         +'<li><strong>Iniciante:</strong> somente turmas de Iniciante</li>'
         +'<li><strong>Intermediário:</strong> turmas de Intermediário e Iniciante</li>'
         +'<li><strong>Avançado:</strong> turmas de qualquer nível, sem controle de saldo</li>'
+        +'<li><strong>Matina:</strong> segue a mesma liberação de turmas do Avançado e não controla saldo</li>'
         +'<li>A categoria é definida e alterada somente pela gestão</li>'
       +'</ul></div>'
 
@@ -3741,6 +3780,17 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
 
 
 
