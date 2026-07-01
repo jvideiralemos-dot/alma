@@ -2563,25 +2563,41 @@ function tabPerfil(tab,btn){
     renderSolicitacoesAluno(el, u);
   }
 }
-function salvarPerfil(){
-  const alunos=GA();const idx=alunos.findIndex(a=>a.id===CU.id);if(idx<0)return;
-  alunos[idx].nome=document.getElementById('pd-n').value.trim()||alunos[idx].nome;
-  alunos[idx].email=document.getElementById('pd-e').value.trim()||alunos[idx].email;
-  alunos[idx].telefone=document.getElementById('pd-t').value;
-  alunos[idx].nascimento=document.getElementById('pd-d').value;
-  CU=alunos[idx];SA(alunos);addLog('edit_perfil',{});
+async function salvarPerfil(){
+  const idx0=GA().findIndex(a=>a.id===CU.id);if(idx0<0)return;
+  const patch={
+    nome: document.getElementById('pd-n').value.trim()||CU.nome,
+    email: document.getElementById('pd-e').value.trim()||CU.email,
+    telefone: document.getElementById('pd-t').value,
+    nascimento: document.getElementById('pd-d').value
+  };
+  if(isG()){
+    const alunos=GA();const idx=alunos.findIndex(a=>a.id===CU.id);if(idx<0)return;
+    Object.assign(alunos[idx],patch);
+    CU=alunos[idx];SA(alunos);addLog('edit_perfil',{});
+  } else {
+    try{
+      await sbRpc('aluno_update_self',{p_token:SESSION_TOKEN,p_patch:patch});
+    }catch(e){toast('Erro ao salvar perfil','e');return;}
+    Object.assign(CU,patch);
+    const alunos=GA().slice();const idx=alunos.findIndex(a=>a.id===CU.id);if(idx>=0)alunos[idx]=CU;
+    _cache.alunos=alunos;
+    addLog('edit_perfil',{});
+  }
   toast('Salvo!','s');buildSidebar();
   pgPerfil(document.getElementById('main-content'));
 }
-function alterarSenha(){
+async function alterarSenha(){
   const a=document.getElementById('ps-a').value;
   const n=document.getElementById('ps-n').value;
   const c=document.getElementById('ps-c').value;
-  if(a!==CU.senha){toast('Senha atual incorreta','e');return;}
   if(n.length<6){toast('Mínimo 6 caracteres','e');return;}
   if(n!==c){toast('Senhas não conferem','e');return;}
-  const alunos=GA();const idx=alunos.findIndex(a=>a.id===CU.id);
-  alunos[idx].senha=n;CU.senha=n;SA(alunos);toast('Senha alterada!','s');
+  try{
+    await sbRpc('aluno_change_password',{p_token:SESSION_TOKEN,p_senha_atual:a,p_senha_nova:n});
+  }catch(e){toast('Senha atual incorreta','e');return;}
+  toast('Senha alterada!','s');
+  document.getElementById('ps-a').value='';document.getElementById('ps-n').value='';document.getElementById('ps-c').value='';
 }
 function salvarDiasHor(){
   var alunos=GA();var idx=alunos.findIndex(function(a){return a.id===CU.id;});if(idx<0)return;
@@ -3421,7 +3437,7 @@ function onToggleHorMeusDias(cb,maxH){
   cb.parentElement.style.borderColor = cb.checked ? 'var(--g)' : 'var(--sand2)';
 }
 
-function salvarMeusDias(){
+async function salvarMeusDias(){
   var alunos=GA();var idx=alunos.findIndex(function(a){return a.id===CU.id;});if(idx<0)return;
   var maxH=maxDiasSemana(alunos[idx].databaseAlunos||alunos[idx].plano||'');
   var jaCompleto=maxH&&listaCampo(alunos[idx].horarios).length===maxH&&listaCampo(alunos[idx].diasSemana).length>0;
@@ -3432,13 +3448,22 @@ function salvarMeusDias(){
   if(maxH&&horEls.length!==maxH){toast('Selecione exatamente '+maxH+' horário'+(maxH!==1?'s':'')+' para o seu plano','e');return;}
   var dias=diasEls.map(function(c){return c.value;}).join(', ');
   var hors=horEls.map(function(c){return c.value;}).join(', ');
-  alunos[idx].diasSemana=dias;
-  alunos[idx].horarios=hors;
+  var patch={diasSemana:dias,horarios:hors};
   if(!cadastroPendente){
-    alunos[idx].permitirEditarHorarios=false;
-    alunos[idx].horariosAlteracaoAprovada=false;
+    patch.permitirEditarHorarios=false;
+    patch.horariosAlteracaoAprovada=false;
   }
-  CU=alunos[idx];SA(alunos);
+  if(isG()){
+    Object.assign(alunos[idx],patch);
+    CU=alunos[idx];SA(alunos);
+  } else {
+    try{
+      await sbRpc('aluno_update_self',{p_token:SESSION_TOKEN,p_patch:patch});
+    }catch(e){toast('Erro ao salvar dias e horários','e');return;}
+    Object.assign(CU,patch);
+    var alunos2=GA().slice();var idx2=alunos2.findIndex(function(a){return a.id===CU.id;});if(idx2>=0)alunos2[idx2]=CU;
+    _cache.alunos=alunos2;
+  }
   addLog('edit_dias',{dias:dias,hors:hors});
   toast(cadastroPendente?'Dias e horários salvos. Você ainda pode corrigir enquanto o cadastro estiver em análise.':'Dias e horários salvos e travados!','s');
   pgPerfil(document.getElementById('main-content'));
