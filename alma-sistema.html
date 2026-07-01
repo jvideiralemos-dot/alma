@@ -517,8 +517,7 @@ async function fetchParametro(id) {
   return await gestorFetchParametro(id);
 }
 async function upsertParametro(id, dados) {
-  await sbFetch('parametros?id=eq.' + encodeURIComponent(id), { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('parametros', { method: 'POST', body: { id: id, dados: dados }, prefer: 'return=minimal' });
+  return sbRpc('gestor_upsert_parametro', { p_token: SESSION_TOKEN, p_id: id, p_dados: dados });
 }
 function salvarParametroSupabase(id, dados) {
   DB.set(id, dados);
@@ -529,30 +528,25 @@ function salvarParametroSupabase(id, dados) {
 }
 
 async function upsertAluno(aluno) {
-  await sbFetch('alunos?id=eq.' + aluno.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('alunos', { method: 'POST', body: alunoToDb(aluno) });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'alunos', p_row: alunoToDb(aluno) });
 }
 async function upsertCheckin(ci) {
-  await sbFetch('checkins?id=eq.' + ci.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('checkins', { method: 'POST', body: ci });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'checkins', p_row: ci });
 }
 async function upsertTurma(t) {
-  await sbFetch('turmas?id=eq.' + t.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('turmas', { method: 'POST', body: t });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'turmas', p_row: t });
 }
 async function upsertSolicitacao(s) {
-  await sbFetch('solicitacoes?id=eq.' + s.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('solicitacoes', { method: 'POST', body: solToDb(s) });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'solicitacoes', p_row: solToDb(s) });
 }
 async function upsertRepo(r) {
-  await sbFetch('repos_creditos?id=eq.' + r.id, { method: 'DELETE', prefer: 'return=minimal' });
-  return sbFetch('repos_creditos', { method: 'POST', body: r });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos', p_row: r });
 }
 async function deleteRepo(id) {
-  return sbFetch('repos_creditos?id=eq.' + id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbRpc('gestor_delete', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos', p_id: id });
 }
 async function deleteCheckin(id) {
-  return sbFetch('checkins?id=eq.' + id, { method: 'DELETE', prefer: 'return=minimal' });
+  return sbRpc('gestor_delete', { p_token: SESSION_TOKEN, p_tabela: 'checkins', p_id: id });
 }
 
 /* == WRAPPERS SYNC (usam cache) == */
@@ -641,7 +635,7 @@ const GL = () => _cache.logs || [];
 
 async function addLog(action, dados) {
   try {
-    await sbFetch('logs', { method: 'POST', body: { ts: new Date().toISOString(), action, dados, usuario: CU?.nome || '?' } });
+    await sbRpc('log_action', { p_token: SESSION_TOKEN, p_action: action, p_dados: dados, p_usuario: CU?.nome || '?' });
   } catch(e) { console.warn('log err', e); }
 }
 
@@ -695,8 +689,20 @@ async function initDB() {
           if (Array.isArray(cfgInadimplentes)) DB.set('inadimplentes', cfgInadimplentes);
           if (alunos && alunos.length) DB.set('alunos_cache', alunos);
         } else {
-          // Aluno: só os próprios dados, já vieram do whoami
+          // Aluno: próprios dados + grade de turmas (não sensível)
           _cache.alunos = [CU];
+          try {
+            const [turmas, checkins, sols, repos] = await Promise.all([
+              sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'turmas' }),
+              sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'checkins' }),
+              sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'solicitacoes' }),
+              sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos' })
+            ]);
+            _cache.turmas = turmas || [];
+            _cache.checkins = checkins || [];
+            _cache.solicitacoes = (sols || []).map(solFromDb);
+            _cache.repos = repos || [];
+          } catch(e) { console.warn('Erro ao carregar dados do aluno:', e); }
         }
         if (!DB.get('parametros')) SP(cloneObj(PARAMETROS_DEFAULT));
       } else {
@@ -1035,6 +1041,16 @@ function toggleLoginSenha(){
     }catch(e){console.error('Erro ao carregar dados do painel:',e);}
   } else {
     _cache.alunos=[CU];
+    try{
+      const [turmas, checkins, sols, repos] = await Promise.all([
+        sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'turmas' }),
+        sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'checkins' }),
+        sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'solicitacoes' }),
+        sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos' })
+      ]);
+      _cache.turmas=turmas||[]; _cache.checkins=checkins||[];
+      _cache.solicitacoes=(sols||[]).map(solFromDb); _cache.repos=repos||[];
+    }catch(e){console.warn('Erro ao carregar dados do aluno:',e);}
   }
   if(btn){btn.disabled=false;btn.textContent='Entrar';}
   // Esconder login, mostrar sistema
