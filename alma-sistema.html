@@ -408,6 +408,18 @@ async function sbRpc(fnName, params={}) {
   return res.json();
 }
 
+// Busca uma lista de dados usando o token de sessão da gestora (RLS bloqueia acesso direto)
+let SESSION_TOKEN = null;
+async function gestorFetch(tabela) {
+  if (!SESSION_TOKEN) return [];
+  const d = await sbRpc('gestor_list', { p_token: SESSION_TOKEN, p_tabela: tabela });
+  return d || [];
+}
+async function gestorFetchParametro(id) {
+  if (!SESSION_TOKEN) return null;
+  return sbRpc('gestor_get_parametro', { p_token: SESSION_TOKEN, p_id: id });
+}
+
 // Cache local para evitar requests desnecessários
 const _cache = {};
 const _dirty = {};
@@ -485,28 +497,24 @@ function solToDb(sol){
 }
 
 async function fetchAlunos() {
-  const d = await sbFetch('alunos?order=nome');
+  const d = await gestorFetch('alunos');
   return (d || []).map(alunoFromDb);
 }
 async function fetchCheckins() {
-  const d = await sbFetch('checkins?order=ts.desc&limit=2000');
-  return d || [];
+  return await gestorFetch('checkins');
 }
 async function fetchTurmas() {
-  const d = await sbFetch('turmas?order=dia,horario');
-  return d || [];
+  return await gestorFetch('turmas');
 }
 async function fetchSolicitacoes() {
-  const d = await sbFetch('solicitacoes?order=ts.desc&limit=500');
+  const d = await gestorFetch('solicitacoes');
   return (d || []).map(solFromDb);
 }
 async function fetchRepos() {
-  const d = await sbFetch('repos_creditos?order=geradoEm.desc&limit=500');
-  return d || [];
+  return await gestorFetch('repos_creditos');
 }
 async function fetchParametro(id) {
-  const d = await sbFetch('parametros?id=eq.' + encodeURIComponent(id) + '&select=dados&limit=1');
-  return d && d[0] ? d[0].dados : null;
+  return await gestorFetchParametro(id);
 }
 async function upsertParametro(id, dados) {
   await sbFetch('parametros?id=eq.' + encodeURIComponent(id), { method: 'DELETE', prefer: 'return=minimal' });
@@ -660,55 +668,50 @@ async function initDB() {
   }
 
   try {
-    // Carregar todos os dados em paralelo
-    const [alunos, checkins, turmas, sols, repos, cfgParametros, cfgTurmasHor, cfgInadimplentes] = await Promise.all([
-      fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos(),
-      fetchParametro('parametros'), fetchParametro('turmashor_config'), fetchParametro('inadimplentes')
-    ]);
+    // Verificar sessão salva (token do login anterior)
+    const savedToken = DB.get('session_token');
+    if (savedToken) {
+      const rows = await sbRpc('whoami', { p_token: savedToken });
+      if (rows && rows.length) {
+        SESSION_TOKEN = savedToken;
+        CU = alunoFromDb(rows[0]);
+        DB.set('session', CU.id);
 
-    _cache.alunos = alunos;
-    _cache.checkins = checkins;
-    _cache.turmas = turmas;
-    _cache.solicitacoes = sols;
-    _cache.repos = repos;
-    _cache.logs = [];
-    if (cfgParametros && typeof cfgParametros === 'object') DB.set('parametros', cfgParametros);
-    else if (DB.get('parametros')) SP(DB.get('parametros'));
-    if (cfgTurmasHor && typeof cfgTurmasHor === 'object') DB.set('turmashor_config', cfgTurmasHor);
-    else if (DB.get('turmashor_config')) salvarParametroSupabase('turmashor_config', DB.get('turmashor_config'));
-    if (Array.isArray(cfgInadimplentes)) DB.set('inadimplentes', cfgInadimplentes);
-    else if (DB.get('inadimplentes')) salvarParametroSupabase('inadimplentes', DB.get('inadimplentes'));
-    // Salvar cache local para fallback
-    if (alunos && alunos.length) DB.set('alunos_cache', alunos);
-
-    // Se banco vazio, popular com seed
-    if (!alunos.find(a => a.email === GESTOR_DEFAULT.email)) {
-      console.log('Populando banco com dados iniciais...');
-      const seed = ALUNOS_SEED.slice();
-      if (!seed.find(x => x.email === GESTOR_DEFAULT.email)) seed.unshift(GESTOR_DEFAULT);
-      // Inserir em lotes de 50
-      for (let i = 0; i < seed.length; i += 50) {
-        const lote = seed.slice(i, i + 50);
-        await sbFetch('alunos', { method: 'POST', body: lote.map(alunoToDb), prefer: 'return=minimal' });
+        if (isG()) {
+          // Gestora: carregar os dados do painel usando o crachá de sessão
+          const [alunos, checkins, turmas, sols, repos, cfgParametros, cfgTurmasHor, cfgInadimplentes] = await Promise.all([
+            fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos(),
+            fetchParametro('parametros'), fetchParametro('turmashor_config'), fetchParametro('inadimplentes')
+          ]);
+          _cache.alunos = alunos;
+          _cache.checkins = checkins;
+          _cache.turmas = turmas;
+          _cache.solicitacoes = sols;
+          _cache.repos = repos;
+          _cache.logs = [];
+          if (cfgParametros && typeof cfgParametros === 'object') DB.set('parametros', cfgParametros);
+          else if (DB.get('parametros')) SP(DB.get('parametros'));
+          if (cfgTurmasHor && typeof cfgTurmasHor === 'object') DB.set('turmashor_config', cfgTurmasHor);
+          if (Array.isArray(cfgInadimplentes)) DB.set('inadimplentes', cfgInadimplentes);
+          if (alunos && alunos.length) DB.set('alunos_cache', alunos);
+        } else {
+          // Aluno: só os próprios dados, já vieram do whoami
+          _cache.alunos = [CU];
+        }
+        if (!DB.get('parametros')) SP(cloneObj(PARAMETROS_DEFAULT));
+      } else {
+        // Sessão expirada ou inválida
+        DB.del('session_token');
+        DB.del('session');
       }
-      _cache.alunos = await fetchAlunos();
     }
-
-    // Parâmetros no Supabase/cache se não existirem
-    if (!DB.get('parametros')) {
-      SP(cloneObj(PARAMETROS_DEFAULT));
-    }
-
   } catch(e) {
     console.error('Erro ao carregar dados:', e);
-    // Fallback: tentar usar dados do localStorage se existirem
     if (!_cache.alunos || !_cache.alunos.length) {
       const fallback = DB.get('alunos_cache');
       if (fallback && fallback.length) {
         _cache.alunos = fallback;
         console.warn('Usando cache local — Supabase indisponível');
-      } else {
-        alert('Erro ao conectar ao banco de dados. Verifique sua conexão e recarregue a página.\n\n' + e.message);
       }
     }
   }
@@ -718,11 +721,8 @@ async function initDB() {
   if (loader) loader.remove();
 
   // Verificar sessão salva
-  const sid = DB.get('session');
-  if (sid) {
-    const u = _cache.alunos.find(a => a.id === sid);
-    if (u) {
-      CU = u;
+  if (CU) {
+    {
       document.getElementById('login-screen').style.display = 'none';
       const sist = document.getElementById('sistema');
       sist.style.display = 'flex';
@@ -1007,26 +1007,36 @@ function toggleLoginSenha(){
   const btn=document.querySelector('#login-screen .btn-g');
   err.style.display='none';
   if(btn){btn.disabled=true;btn.textContent='Entrando...';}
-  let u=null;
+  let u=null, token=null;
   try{
     const rows=await sbRpc('login_aluno',{p_email:em,p_senha:pw});
     if(rows&&rows.length){
+      token=rows[0].session_token;
       u=alunoFromDb(rows[0]);
-      // Atualiza o cache local com os dados desse usuario (sem a senha)
-      const alunos=GA().slice();
-      const i=alunos.findIndex(function(a){return a.id===u.id;});
-      if(i>=0) alunos[i]=u; else alunos.push(u);
-      _cache.alunos=alunos;
     }
   }catch(e){console.warn('Falha ao consultar login no Supabase:',e);}
-  if(btn){btn.disabled=false;btn.textContent='Entrar';}
   if(!u){
+    if(btn){btn.disabled=false;btn.textContent='Entrar';}
     err.textContent='E-mail ou senha incorretos.';
     err.style.display='block';
     return;
   }
   CU=u;
+  SESSION_TOKEN=token;
   DB.set('session',u.id);
+  DB.set('session_token',token);
+  if(isG()){
+    try{
+      const [alunos, checkins, turmas, sols, repos] = await Promise.all([
+        fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos()
+      ]);
+      _cache.alunos=alunos; _cache.checkins=checkins; _cache.turmas=turmas;
+      _cache.solicitacoes=sols; _cache.repos=repos; _cache.logs=[];
+    }catch(e){console.error('Erro ao carregar dados do painel:',e);}
+  } else {
+    _cache.alunos=[CU];
+  }
+  if(btn){btn.disabled=false;btn.textContent='Entrar';}
   // Esconder login, mostrar sistema
   document.getElementById('login-screen').style.display='none';
   var sist=document.getElementById('sistema');
@@ -1049,7 +1059,9 @@ if(targetPage&&['checkin','perfil','saldo','pagamento','dashboard'].includes(tar
 }
 function logout(){
   CU=null;
+  SESSION_TOKEN=null;
   DB.del('session');
+  DB.del('session_token');
   // Esconder sistema
   var sist=document.getElementById('sistema');
   sist.style.display='none';
