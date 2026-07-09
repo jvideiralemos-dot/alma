@@ -372,8 +372,6 @@ tbody tr:last-child{border-bottom:none}
 <script>
 var ALUNOS_SEED=[];
 
-/* == SEED DATA == */
-const GESTOR_DEFAULT = {id:'g001',nome:'Joana',email:'joana@almafutevolei.com',senha:'',perfil:'Gestor',nivel:'Gestor',status:'Ativa',plano:'',cpf:'00000000001',telefone:'',nascimento:'',genero:'F',diasSemana:'',horarios:'',vencMensalidade:'',comoConheceu:'',databaseAlunos:'',motivoInativo:'',ct:'',observacao:'',metodoPagamento:'',fotosLink:'',pacoteAulas:0,aulas_repos:0};
 
 /* == STORAGE == */
 /* == SUPABASE CONFIG == */
@@ -1402,7 +1400,7 @@ function modalNovoAluno(){
     <div class="fg"><label>Status</label><select id="na-status"><option>Ativa</option><option>Aguardando Aprovação</option><option>Inativa</option><option>Viagem</option><option>Lesão</option><option>Bloqueado</option></select></div>
   </div>
   <div class="fg" style="margin-top:12px"><label>Dias e horários de treino</label><div id="na-dias-widget"></div></div>
-  <div class="fg" style="margin-top:10px"><label>Senha inicial</label><input id="na-senha" value="${esc(regras.senhaPadrao||'123456')}"></div>
+  <div class="fg" style="margin-top:10px"><label>Senha inicial</label><input value="Primeiro acesso pelo CPF" disabled style="background:var(--sand);color:var(--muted);font-size:.82rem"><small style="color:var(--muted);font-size:.70rem">O aluno entra com o CPF no 1º acesso e define a própria senha depois.</small></div>
   <div class="fg" style="margin-top:8px"><label>Observação</label><textarea id="na-obs"></textarea></div>`,
   [{lbl:'Cancelar',cls:'btn-gh',fn:'closeModal()'},{lbl:'Salvar',cls:'btn-g',fn:'saveNovoAluno()'}]
   );
@@ -1421,7 +1419,7 @@ function saveNovoAluno(){
   var dh=getDiasHorariosValue('na');
   var novo={
     id:'a'+Date.now(),nome,email,
-    senha:cpfNovo||document.getElementById('na-senha').value||paramRegras().senhaPadrao||'123456',
+    senha:'', // 1º acesso pelo CPF; vira hash quando o aluno definir a senha
     cpf:cpfNovo,
     telefone:document.getElementById('na-tel').value,
     nascimento:document.getElementById('na-nasc').value,
@@ -3284,7 +3282,7 @@ function registrarMatriculaPendente(dados){
   if(cpfLimpo&&cpfLimpo.length<11)cpfLimpo=cpfLimpo.padStart(11,'0');
   if(alunos.find(function(a){return String(a.email||'').toLowerCase()===(dados.email||'').toLowerCase();})){return{ok:false,msg:'Email ja cadastrado'};}
   if(cpfLimpo&&alunos.find(function(a){return String(a.cpf||'').replace(/\D/g,'')===cpfLimpo;})){return{ok:false,msg:'CPF ja cadastrado'};}
-  var novo={id:'a'+Date.now(),nome:dados.nome,email:dados.email,senha:cpfLimpo||paramRegras().senhaPadrao||'123456',cpf:cpfLimpo,telefone:dados.telefone||'',nascimento:dados.nascimento||'',genero:dados.genero||'',nivel:'Iniciante',plano:'',databaseAlunos:dados.plano||'',vencMensalidade:dados.vencimento||'',diasSemana:'',horarios:'',status:'Aguardando Aprovação',perfil:'Aluno',metodoPagamento:dados.metodoPagamento||'',observacao:'Matricula via site',pacoteAulas:0,aulas_avulsas:0,aulas_repos:0,fotosLink:'',checkinLiberado:false,timestamp:new Date().toISOString()};
+  var novo={id:'a'+Date.now(),nome:dados.nome,email:dados.email,senha:'',cpf:cpfLimpo,telefone:dados.telefone||'',nascimento:dados.nascimento||'',genero:dados.genero||'',nivel:'Iniciante',plano:'',databaseAlunos:dados.plano||'',vencMensalidade:dados.vencimento||'',diasSemana:'',horarios:'',status:'Aguardando Aprovação',perfil:'Aluno',metodoPagamento:dados.metodoPagamento||'',observacao:'Matricula via site (1º acesso pelo CPF)',pacoteAulas:0,aulas_avulsas:0,aulas_repos:0,fotosLink:'',checkinLiberado:false,timestamp:new Date().toISOString()};
   alunos.push(novo);SA(alunos);
   var sols=GS();
   sols.push({id:'s'+Date.now(),userId:novo.id,nomeAluno:novo.nome,tipo:'matricula',planoEscolhido:dados.plano||'',motivo:'Plano: '+(dados.plano||'?')+' | Venc: '+(dados.vencimento||'?')+' | Pag: '+(dados.metodoPagamento||'?'),status:'pendente',ts:new Date().toISOString()});
