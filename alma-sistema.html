@@ -468,12 +468,27 @@ function normalizarDataInput(valor){
   }
   return v;
 }
+function normalizarStatusAluno(valor){
+  var original=String(valor||'').trim();
+  if(!original)return 'Ativa';
+  var key=original.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+  if(['ativa','ativo','active','matricula ativa','matriculado','matriculada'].includes(key))return 'Ativa';
+  if(['inativa','inativo','inactive','cancelada','cancelado','matricula inativa'].includes(key))return 'Inativa';
+  if(['aguardando aprovacao','aguardando aprovação','pendente','em aprovacao','em aprovação'].includes(key))return 'Aguardando Aprovação';
+  if(['viagem','pausa viagem'].includes(key))return 'Viagem';
+  if(['lesao','lesão','pausa lesao','pausa lesão'].includes(key))return 'Lesão';
+  if(['bloqueado','bloqueada','inadimplente'].includes(key))return 'Bloqueado';
+  if(['pausada','pausado','pausa'].includes(key))return 'Pausada';
+  if(['cancelamento solicitado','solicitou cancelamento'].includes(key))return 'Cancelamento Solicitado';
+  return original;
+}
 function alunoFromDb(row){
   const out={...(row||{})};
   Object.entries(ALUNO_FIELD_MAP).forEach(([db,app])=>{
     if(out[db]!==undefined&&out[app]===undefined)out[app]=out[db];
   });
   if(out.nascimento)out.nascimento=normalizarDataInput(out.nascimento);
+  out.status=normalizarStatusAluno(out.status);
   return out;
 }
 function alunoToDb(aluno){
@@ -598,10 +613,19 @@ const SA = (arr) => {
   const snap = _snap.alunos || (_snap.alunos = {});
   const changed = arr.filter(a => a && a.id !== undefined && snap[a.id] !== JSON.stringify(a));
   _cache.alunos = arr;
-  changed.forEach(a => { snap[a.id] = JSON.stringify(a); });
   if (changed.length) {
-    (async () => { for (const a of changed) { await upsertAluno(a); } })();
+    return (async () => {
+      let synced=0;
+      for (const a of changed) {
+        const res=await upsertAluno(a);
+        if(res===null)throw new Error('Falha ao sincronizar aluno: '+(a.nome||a.email||a.id));
+        snap[a.id] = JSON.stringify(a);
+        synced++;
+      }
+      return {total:arr.length,changed:changed.length,synced};
+    })();
   }
+  return Promise.resolve({total:arr.length,changed:0,synced:0});
 };
 // Checkins
 const GC = () => _cache.checkins || [];
@@ -959,9 +983,10 @@ function statusEfetivo(a){
     if(atual)a=atual;
     if(isInadimplente(a.id))return 'Bloqueado';
   }
-  if(a.status==='Pausada')return 'Viagem';
-  if(a.status==='Cancelamento Solicitado')return 'Inativa';
-  return a.status||'Ativa';
+  var status=normalizarStatusAluno(a.status);
+  if(status==='Pausada')return 'Viagem';
+  if(status==='Cancelamento Solicitado')return 'Inativa';
+  return status;
 }
 function camposPendentesCadastro(a){
   var campos=[];
@@ -1475,13 +1500,24 @@ function importarAlunosExcel(ev){
   var file=ev.target.files&&ev.target.files[0];
   if(!file)return;
   var reader=new FileReader();
-  reader.onload=function(){
+  reader.onload=async function(){
     try{
       var rows=parseCsv(String(reader.result||''));
       if(!rows.length){toast('Arquivo vazio ou inválido','e');return;}
       if(!confirm('Importar esta base vai substituir a base atual de alunos. Continuar?'))return;
-      SA(rows);addLog('import_alunos',{total:rows.length});toast('Base importada','s');pgAlunos(document.getElementById('main-content'));
-    }catch(e){toast('Não foi possível importar a base','e');}
+      toast('Sincronizando '+rows.length+' alunos...','s');
+      var sync=await SA(rows);
+      var atualizados=await fetchAlunos();
+      if(atualizados&&atualizados.length>=rows.length){
+        _cache.alunos=atualizados;
+        snapStore('alunos');
+      }else if(atualizados){
+        console.warn('Conferência pós-importação retornou menos alunos que o arquivo:', atualizados.length, rows.length);
+      }
+      addLog('import_alunos',{total:rows.length,sincronizados:sync.synced,alterados:sync.changed});
+      toast('Base importada: '+rows.length+' alunos lidos, '+sync.synced+' sincronizados','s');
+      pgAlunos(document.getElementById('main-content'));
+    }catch(e){console.error(e);toast(e.message||'Não foi possível importar a base','e');}
     ev.target.value='';
   };
   reader.readAsText(file,'utf-8');
@@ -3973,13 +4009,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
-
-
-
-
-
-
 
 
 
