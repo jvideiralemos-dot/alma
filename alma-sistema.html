@@ -476,7 +476,11 @@ const SOL_FIELD_MAP={
   userid:'userId',
   nomealuno:'nomeAluno',
   planoescolhido:'planoEscolhido',
-  comprovantenome:'comprovanteNome'
+  comprovantenome:'comprovanteNome',
+  quantidadeaulas:'quantidadeAulas',
+  tipocompra:'tipoCompra',
+  processadoem:'processadoEm',
+  processadopor:'processadoPor'
 };
 function solFromDb(row){
   const out={...(row||{})};
@@ -494,12 +498,36 @@ function solToDb(sol){
   return out;
 }
 
+// Mapeamento camelCase (app) <-> minúsculas (banco) para checkins e créditos
+const CHECKIN_FIELD_MAP={userid:'userId',nomealuno:'nomeAluno',turmaid:'turmaId'};
+const REPO_FIELD_MAP={userid:'userId',nomealuno:'nomeAluno',geradoem:'geradoEm'};
+function rowFromDb(map,row){
+  const out={...(row||{})};
+  Object.entries(map).forEach(([db,app])=>{
+    if(out[db]!==undefined&&out[app]===undefined)out[app]=out[db];
+  });
+  return out;
+}
+function rowToDb(map,row){
+  const src=row||{};
+  const out={...src};
+  Object.entries(map).forEach(([db,app])=>{
+    if(src[app]!==undefined){out[db]=src[app];delete out[app];}
+  });
+  return out;
+}
+const ciFromDb=(r)=>rowFromDb(CHECKIN_FIELD_MAP,r);
+const ciToDb=(r)=>rowToDb(CHECKIN_FIELD_MAP,r);
+const repoFromDb=(r)=>rowFromDb(REPO_FIELD_MAP,r);
+const repoToDb=(r)=>rowToDb(REPO_FIELD_MAP,r);
+
 async function fetchAlunos() {
   const d = await gestorFetch('alunos');
   return (d || []).map(alunoFromDb);
 }
 async function fetchCheckins() {
-  return await gestorFetch('checkins');
+  const d = await gestorFetch('checkins');
+  return (d || []).map(ciFromDb);
 }
 async function fetchTurmas() {
   return await gestorFetch('turmas');
@@ -509,7 +537,8 @@ async function fetchSolicitacoes() {
   return (d || []).map(solFromDb);
 }
 async function fetchRepos() {
-  return await gestorFetch('repos_creditos');
+  const d = await gestorFetch('repos_creditos');
+  return (d || []).map(repoFromDb);
 }
 async function fetchParametro(id) {
   return await gestorFetchParametro(id);
@@ -529,7 +558,7 @@ async function upsertAluno(aluno) {
   return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'alunos', p_row: alunoToDb(aluno) });
 }
 async function upsertCheckin(ci) {
-  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'checkins', p_row: ci });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'checkins', p_row: ciToDb(ci) });
 }
 async function upsertTurma(t) {
   return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'turmas', p_row: t });
@@ -538,7 +567,7 @@ async function upsertSolicitacao(s) {
   return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'solicitacoes', p_row: solToDb(s) });
 }
 async function upsertRepo(r) {
-  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos', p_row: r });
+  return sbRpc('gestor_upsert', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos', p_row: repoToDb(r) });
 }
 async function deleteRepo(id) {
   return sbRpc('gestor_delete', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos', p_id: id });
@@ -697,9 +726,9 @@ async function initDB() {
               sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos' })
             ]);
             _cache.turmas = turmas || [];
-            _cache.checkins = checkins || [];
+            _cache.checkins = (checkins || []).map(ciFromDb);
             _cache.solicitacoes = (sols || []).map(solFromDb);
-            _cache.repos = repos || [];
+            _cache.repos = (repos || []).map(repoFromDb);
           } catch(e) { console.warn('Erro ao carregar dados do aluno:', e); }
         }
         if (!DB.get('parametros')) SP(cloneObj(PARAMETROS_DEFAULT));
@@ -1046,8 +1075,8 @@ function toggleLoginSenha(){
         sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'solicitacoes' }),
         sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos' })
       ]);
-      _cache.turmas=turmas||[]; _cache.checkins=checkins||[];
-      _cache.solicitacoes=(sols||[]).map(solFromDb); _cache.repos=repos||[];
+      _cache.turmas=turmas||[]; _cache.checkins=(checkins||[]).map(ciFromDb);
+      _cache.solicitacoes=(sols||[]).map(solFromDb); _cache.repos=(repos||[]).map(repoFromDb);
     }catch(e){console.warn('Erro ao carregar dados do aluno:',e);}
   }
   if(btn){btn.disabled=false;btn.textContent='Entrar';}
