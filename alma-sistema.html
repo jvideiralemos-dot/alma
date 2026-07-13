@@ -421,6 +421,15 @@ async function gestorFetchParametro(id) {
 // Cache local para evitar requests desnecessários
 const _cache = {};
 const _dirty = {};
+// Snapshot (foto) do último estado sincronizado com o Supabase, por id.
+// Permite detectar o que realmente mudou mesmo quando o código altera o array do cache no lugar.
+const _snap = {};
+function snapStore(store){
+  const m = {};
+  (_cache[store] || []).forEach(r => { if (r && r.id !== undefined) m[r.id] = JSON.stringify(r); });
+  _snap[store] = m;
+}
+function snapAll(){ ['alunos','checkins','turmas','solicitacoes','repos'].forEach(snapStore); }
 
 /* == STORAGE (localStorage para sessao/cache; Supabase para dados e configuracoes) == */
 const DB={
@@ -580,13 +589,11 @@ async function deleteCheckin(id) {
 // Alunos
 const GA = () => _cache.alunos || [];
 const SA = (arr) => {
-  // Detectar quais alunos mudaram e salvar no Supabase em background
-  const prev = _cache.alunos || [];
-  const changed = arr === prev ? arr : arr.filter(a => {
-    const p = prev.find(x => x.id === a.id);
-    return !p || JSON.stringify(p) !== JSON.stringify(a);
-  });
+  // Grava no Supabase apenas os alunos que realmente mudaram desde a última sincronização
+  const snap = _snap.alunos || (_snap.alunos = {});
+  const changed = arr.filter(a => a && a.id !== undefined && snap[a.id] !== JSON.stringify(a));
   _cache.alunos = arr;
+  changed.forEach(a => { snap[a.id] = JSON.stringify(a); });
   if (changed.length) {
     (async () => { for (const a of changed) { await upsertAluno(a); } })();
   }
@@ -595,31 +602,29 @@ const SA = (arr) => {
 // Checkins
 const GC = () => _cache.checkins || [];
 const SC = (arr) => {
-  const prev = _cache.checkins || [];
-  const changed = arr === prev ? arr : arr.filter(c => {
-    const p = prev.find(x => x.id === c.id);
-    return !p || JSON.stringify(p) !== JSON.stringify(c);
-  });
-  // Detectar removidos
-  const removed = prev.filter(c => !arr.find(x => x.id === c.id));
+  const snap = _snap.checkins || (_snap.checkins = {});
+  const ids = {};
+  arr.forEach(x => { if (x && x.id !== undefined) ids[x.id] = true; });
+  const changed = arr.filter(ci => ci && ci.id !== undefined && snap[ci.id] !== JSON.stringify(ci));
+  const removedIds = Object.keys(snap).filter(id => !ids[id]);
   _cache.checkins = arr;
+  changed.forEach(ci => { snap[ci.id] = JSON.stringify(ci); });
+  removedIds.forEach(id => { delete snap[id]; });
   if (changed.length) {
-    (async () => { for (const c of changed) { await upsertCheckin(c); } })();
+    (async () => { for (const ci of changed) { await upsertCheckin(ci); } })();
   }
-  if (removed.length) {
-    (async () => { for (const c of removed) { await deleteCheckin(c.id); } })();
+  if (removedIds.length) {
+    (async () => { for (const id of removedIds) { await deleteCheckin(id); } })();
   }
 };
 
 // Turmas
 const GT = () => _cache.turmas || [];
 const ST = (arr) => {
-  const prev = _cache.turmas || [];
-  const changed = arr === prev ? arr : arr.filter(t => {
-    const p = prev.find(x => x.id === t.id);
-    return !p || JSON.stringify(p) !== JSON.stringify(t);
-  });
+  const snap = _snap.turmas || (_snap.turmas = {});
+  const changed = arr.filter(t => t && t.id !== undefined && snap[t.id] !== JSON.stringify(t));
   _cache.turmas = arr;
+  changed.forEach(t => { snap[t.id] = JSON.stringify(t); });
   if (changed.length) {
     (async () => { for (const t of changed) { await upsertTurma(t); } })();
   }
@@ -628,12 +633,10 @@ const ST = (arr) => {
 // Solicitações
 const GS = () => _cache.solicitacoes || [];
 const SS = (arr) => {
-  const prev = _cache.solicitacoes || [];
-  const changed = arr === prev ? arr : arr.filter(s => {
-    const p = prev.find(x => x.id === s.id);
-    return !p || JSON.stringify(p) !== JSON.stringify(s);
-  });
+  const snap = _snap.solicitacoes || (_snap.solicitacoes = {});
+  const changed = arr.filter(s => s && s.id !== undefined && snap[s.id] !== JSON.stringify(s));
   _cache.solicitacoes = arr;
+  changed.forEach(s => { snap[s.id] = JSON.stringify(s); });
   if (changed.length) {
     (async () => { for (const s of changed) { await upsertSolicitacao(s); } })();
   }
@@ -642,18 +645,19 @@ const SS = (arr) => {
 // Repos
 const GR = () => _cache.repos || [];
 const SR = (arr) => {
-  const prev = _cache.repos || [];
-  const changed = arr === prev ? arr : arr.filter(r => {
-    const p = prev.find(x => x.id === r.id);
-    return !p || JSON.stringify(p) !== JSON.stringify(r);
-  });
-  const removed = prev.filter(r => !arr.find(x => x.id === r.id));
+  const snap = _snap.repos || (_snap.repos = {});
+  const ids = {};
+  arr.forEach(x => { if (x && x.id !== undefined) ids[x.id] = true; });
+  const changed = arr.filter(r => r && r.id !== undefined && snap[r.id] !== JSON.stringify(r));
+  const removedIds = Object.keys(snap).filter(id => !ids[id]);
   _cache.repos = arr;
+  changed.forEach(r => { snap[r.id] = JSON.stringify(r); });
+  removedIds.forEach(id => { delete snap[id]; });
   if (changed.length) {
     (async () => { for (const r of changed) { await upsertRepo(r); } })();
   }
-  if (removed.length) {
-    (async () => { for (const r of removed) { await deleteRepo(r.id); } })();
+  if (removedIds.length) {
+    (async () => { for (const id of removedIds) { await deleteRepo(id); } })();
   }
 };
 
@@ -710,6 +714,7 @@ async function initDB() {
           _cache.solicitacoes = sols;
           _cache.repos = repos;
           _cache.logs = [];
+          snapAll();
           if (cfgParametros && typeof cfgParametros === 'object') DB.set('parametros', cfgParametros);
           else if (DB.get('parametros')) SP(DB.get('parametros'));
           if (cfgTurmasHor && typeof cfgTurmasHor === 'object') DB.set('turmashor_config', cfgTurmasHor);
@@ -729,6 +734,7 @@ async function initDB() {
             _cache.checkins = (checkins || []).map(ciFromDb);
             _cache.solicitacoes = (sols || []).map(solFromDb);
             _cache.repos = (repos || []).map(repoFromDb);
+            snapAll();
           } catch(e) { console.warn('Erro ao carregar dados do aluno:', e); }
         }
         if (!DB.get('parametros')) SP(cloneObj(PARAMETROS_DEFAULT));
@@ -1064,7 +1070,7 @@ function toggleLoginSenha(){
         fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos()
       ]);
       _cache.alunos=alunos; _cache.checkins=checkins; _cache.turmas=turmas;
-      _cache.solicitacoes=sols; _cache.repos=repos; _cache.logs=[];
+      _cache.solicitacoes=sols; _cache.repos=repos; _cache.logs=[]; snapAll();
     }catch(e){console.error('Erro ao carregar dados do painel:',e);}
   } else {
     _cache.alunos=[CU];
@@ -1076,7 +1082,7 @@ function toggleLoginSenha(){
         sbRpc('aluno_list', { p_token: SESSION_TOKEN, p_tabela: 'repos_creditos' })
       ]);
       _cache.turmas=turmas||[]; _cache.checkins=(checkins||[]).map(ciFromDb);
-      _cache.solicitacoes=(sols||[]).map(solFromDb); _cache.repos=(repos||[]).map(repoFromDb);
+      _cache.solicitacoes=(sols||[]).map(solFromDb); _cache.repos=(repos||[]).map(repoFromDb); snapAll();
     }catch(e){console.warn('Erro ao carregar dados do aluno:',e);}
   }
   if(btn){btn.disabled=false;btn.textContent='Entrar';}
