@@ -1758,7 +1758,7 @@ function renderPresenca(){
     +ativos.map(function(a){
       expirarReposicoes(a);
       var aulasDir=calcSaldoPeriodo(a);
-      var usadas=checkinsNoPeriodo(a.id,a.vencMensalidade);
+      var usadas=checkinsNoPeriodo(a.id,a.vencMensalidade,a);
       var saldo=Math.max(0,aulasDir-usadas);
       var repos=GR().filter(function(r){return r.userId===a.id&&r.status==='disponivel';}).length;
       var total=saldo+repos;
@@ -1889,8 +1889,14 @@ function processarSol(id,decisao){
         alunos[ai].aulas_repos=reposicoesDisponiveisAluno(alunos[ai]).length;
       }
       else if(s.tipo==='alteracao_vencimento'){
-        var novo=s.motivo.replace('Novo vencimento: Dia ','');
-        alunos[ai].vencMensalidade=novo;
+        var mNovo=String(s.motivo||'').match(/Novo vencimento:\s*Dia\s*(\d+)/i);
+        var novo=mNovo?mNovo[1]:'';
+        var anterior=alunos[ai].vencMensalidade||'';
+        if(String(s.motivo||'').indexOf('Vencimento anterior: Dia ')<0){
+          s.motivo='Novo vencimento: Dia '+novo+' | Vencimento anterior: Dia '+anterior;
+          sols[idx]=s;SS(sols);
+        }
+        if(novo)alunos[ai].vencMensalidade=novo;
       }
       else if(s.tipo==='alteracao_plano'){
         var novop=s.motivo.replace('Novo plano: ','');
@@ -2910,10 +2916,10 @@ function pgSaldo(el){
     return;
   }
   var venc=parseInt(u.vencMensalidade)||3;
-  var periodo=getPeriodo(venc);
+  var periodo=periodoSaldoAluno(u);
   var aulasSemanais=aulasPorSemana(u);
   var aulasDir=calcSaldoPeriodo(u);
-  var usadas=checkinsNoPeriodo(u.id,u.vencMensalidade);
+  var usadas=checkinsNoPeriodo(u.id,u.vencMensalidade,u);
   var avulsas=avulsasDisponiveisAluno(u);
   var repos=reposicoesDisponiveisAluno(u);
   var saldoPeriodo=Math.max(0,(aulasDir-usadas)+repos.length);
@@ -3333,9 +3339,9 @@ function avulsasDisponiveisAluno(a){
 function comprasAguardandoAluno(userId){
   return GS().filter(function(s){return s.userId===userId&&s.tipo==='compra_aula'&&s.status==='pendente';});
 }
-function checkinsPlanoNoPeriodo(alunoId,venc){
+function checkinsPlanoNoPeriodo(alunoId,venc,aluno){
   var v=parseInt(venc)||3;
-  var p=getPeriodo(v);
+  var p=aluno?periodoSaldoAluno(aluno):getPeriodo(v);
   return GC().filter(function(c){
     return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr&&c.dia<=p.fimStr&&['pacote','avulsa','repos','reposicao','gestor','livre'].indexOf(c.tipo)===-1;
   }).length;
@@ -3357,7 +3363,7 @@ function tipoCheckinParaAluno(aluno,dia){
   if(isAWA(aluno))return 'awa';
   if(repos)return 'repos';
   var aulasDir=calcSaldoPeriodo(aluno);
-  var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade);
+  var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade,aluno);
   if(aulasDir>usadas)return 'normal';
   if(pacote)return 'pacote';
   if(avulsa)return 'avulsa';
@@ -3367,7 +3373,7 @@ function saldoTotalAulasAluno(aluno){
   if(!aluno)return 0;
   expirarReposicoes(aluno);
   var aulasDir=calcSaldoPeriodo(aluno);
-  var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade);
+  var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade,aluno);
   var saldoPlano=Math.max(0,aulasDir-usadas);
   var repos=reposicoesDisponiveisAluno(aluno).length;
   var avulsas=avulsasDisponiveisAluno(aluno).length;
@@ -3469,18 +3475,52 @@ function getCutoff(dia,horario){
 }
 function isLockedV2(dia,horario){return new Date()>getCutoff(dia,horario);}
 function getPeriodo(vencNum){
-  var hoje=new Date();var ano=hoje.getFullYear();var mes=hoje.getMonth();
+  return getPeriodoNaData(vencNum,new Date());
+}
+function getPeriodoNaData(vencNum,ref){
+  ref=ref?new Date(ref):new Date();
+  var ano=ref.getFullYear();var mes=ref.getMonth();
   var ini=new Date(ano,mes,vencNum,12,0,0,0);
-  if(hoje<ini)ini=new Date(ano,mes-1,vencNum,12,0,0,0);
+  if(ref<ini)ini=new Date(ano,mes-1,vencNum,12,0,0,0);
   var prox=new Date(ini.getFullYear(),ini.getMonth()+1,vencNum,12,0,0,0);
   var fim=new Date(prox.getFullYear(),prox.getMonth(),prox.getDate()-1,12,0,0,0);
   return{ini:ini,fim:fim,prox:prox,iniStr:ini.toISOString().split('T')[0],fimStr:fim.toISOString().split('T')[0],proxStr:prox.toISOString().split('T')[0]};
 }
-function calcSaldoPeriodo(aluno){
-  var v=parseInt(aluno.vencMensalidade)||3;
-  return aulasPeriodo(aluno,getPeriodo(v));
+function proximoVencimentoDesde(vencNum,ref){
+  ref=ref?new Date(ref):new Date();
+  var d=new Date(ref.getFullYear(),ref.getMonth(),parseInt(vencNum)||3,12,0,0,0);
+  if(d<new Date(ref.getFullYear(),ref.getMonth(),ref.getDate(),0,0,0,0))d.setMonth(d.getMonth()+1);
+  return d;
 }
-function checkinsNoPeriodo(alunoId,venc){return checkinsPlanoNoPeriodo(alunoId,venc);}
+function transicaoVencimentoAluno(aluno){
+  if(!aluno)return null;
+  var novoAtual=parseInt(aluno.vencMensalidade)||0;
+  var sols=GS().filter(function(s){return s.userId===aluno.id&&s.tipo==='alteracao_vencimento'&&s.status==='aprovado';})
+    .sort(function(a,b){return (b.processadoEm||b.ts||'')>(a.processadoEm||a.ts||'')?1:-1;});
+  for(var i=0;i<sols.length;i++){
+    var motivo=String(sols[i].motivo||'');
+    var mn=motivo.match(/Novo vencimento:\s*Dia\s*(\d+)/i);
+    var ma=motivo.match(/Vencimento anterior:\s*Dia\s*(\d+)/i);
+    if(!mn||!ma)continue;
+    var novo=parseInt(mn[1])||0,antigo=parseInt(ma[1])||0;
+    if(novo!==novoAtual||!antigo)continue;
+    var aprovadoEm=new Date(sols[i].processadoEm||sols[i].ts||new Date());
+    var inicio=proximoVencimentoDesde(antigo,aprovadoEm);
+    var proxNovo=proximoVencimentoDesde(novo,new Date(inicio.getFullYear(),inicio.getMonth(),inicio.getDate()+1,12,0,0,0));
+    var fim=new Date(proxNovo.getFullYear(),proxNovo.getMonth(),proxNovo.getDate()-1,12,0,0,0);
+    var hoje=new Date();
+    if(hoje<inicio)return getPeriodoNaData(antigo,hoje);
+    if(hoje<=fim)return{ini:inicio,fim:fim,prox:proxNovo,iniStr:inicio.toISOString().split('T')[0],fimStr:fim.toISOString().split('T')[0],proxStr:proxNovo.toISOString().split('T')[0],transicaoVencimento:true};
+  }
+  return null;
+}
+function periodoSaldoAluno(aluno){
+  return transicaoVencimentoAluno(aluno)||getPeriodo(parseInt(aluno&&aluno.vencMensalidade)||3);
+}
+function calcSaldoPeriodo(aluno){
+  return aulasPeriodo(aluno,periodoSaldoAluno(aluno));
+}
+function checkinsNoPeriodo(alunoId,venc,aluno){return checkinsPlanoNoPeriodo(alunoId,venc,aluno);}
 function saldoDisponivel(aluno){
   if(!controlaSaldoAluno(aluno))return 999;
   return saldoTotalAulasAluno(aluno);
