@@ -1349,7 +1349,7 @@ function filtAlunos(){
 }
 
 
-const ALUNO_EXPORT_FIELDS=['id','timestamp','nome','telefone','cpf','email','nascimento','vencMensalidade','nivel','plano','diasSemana','horarios','comoConheceu','genero','status','databaseAlunos','motivoInativo','ct','observacao','perfil','senha','pacoteAulas','metodoPagamento','fotosLink','checkinLiberado','aulas_avulsas','aulas_repos','pacoteExpira','permitirEditarHorarios','horariosAlteracaoAprovada','pausaInicioEm','matriculaViaSite','subcategoria'];
+const ALUNO_EXPORT_FIELDS=['id','timestamp','nome','telefone','cpf','email','nascimento','vencMensalidade','nivel','plano','diasSemana','horarios','comoConheceu','genero','status','motivoInativo','ct','observacao','perfil','senha','pacoteAulas','metodoPagamento','fotosLink','checkinLiberado','aulas_avulsas','aulas_repos','pacoteExpira','permitirEditarHorarios','horariosAlteracaoAprovada','pausaInicioEm','matriculaViaSite','subcategoria'];
 function csvEscape(v){
   v=v==null?'':String(v);
   var nl=String.fromCharCode(10),cr=String.fromCharCode(13);
@@ -1377,6 +1377,7 @@ function formatarDiasSemanaExport(v){
   }).filter(Boolean).join(', ');
 }
 function alunoExportValue(a,f){
+  if(f==='plano')return (a&&(a.databaseAlunos||a.plano))||'';
   var v=a&&a[f];
   if((v===undefined||v==='')&&a){
     Object.entries(ALUNO_FIELD_MAP).some(function(pair){
@@ -1441,6 +1442,8 @@ function parseCsv(text){
       if(obj[h]===undefined||obj[h]==='')obj[h]=val;
     });
     obj=alunoFromDb(obj);
+    if(!String(obj.databaseAlunos||'').trim()&&String(obj.plano||'').trim())obj.databaseAlunos=obj.plano;
+    obj.plano='';
     obj.vencMensalidade=normalizarVencimentoImport(obj.vencMensalidade);
     if(obj.diasSemana!==undefined)obj.diasSemana=normalizarListaImport(obj.diasSemana);
     if(obj.horarios!==undefined)obj.horarios=normalizarListaImport(obj.horarios);
@@ -3897,8 +3900,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
-
 
 
 
