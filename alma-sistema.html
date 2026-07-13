@@ -3505,11 +3505,12 @@ function transicaoVencimentoAluno(aluno){
     var novo=parseInt(mn[1])||0,antigo=parseInt(ma[1])||0;
     if(novo!==novoAtual||!antigo)continue;
     var aprovadoEm=new Date(sols[i].processadoEm||sols[i].ts||new Date());
-    var inicio=proximoVencimentoDesde(antigo,aprovadoEm);
-    var proxNovo=proximoVencimentoDesde(novo,new Date(inicio.getFullYear(),inicio.getMonth(),inicio.getDate()+1,12,0,0,0));
+    var cicloAntigo=getPeriodoNaData(antigo,aprovadoEm);
+    var inicio=cicloAntigo.ini;
+    var refNovo=new Date(cicloAntigo.prox.getFullYear(),cicloAntigo.prox.getMonth(),cicloAntigo.prox.getDate()+1,12,0,0,0);
+    var proxNovo=proximoVencimentoDesde(novo,refNovo);
     var fim=new Date(proxNovo.getFullYear(),proxNovo.getMonth(),proxNovo.getDate()-1,12,0,0,0);
     var hoje=new Date();
-    if(hoje<inicio)return getPeriodoNaData(antigo,hoje);
     if(hoje<=fim)return{ini:inicio,fim:fim,prox:proxNovo,iniStr:inicio.toISOString().split('T')[0],fimStr:fim.toISOString().split('T')[0],proxStr:proxNovo.toISOString().split('T')[0],transicaoVencimento:true};
   }
   return null;
