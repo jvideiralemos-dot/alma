@@ -1376,6 +1376,16 @@ function formatarDiasSemanaExport(v){
     return nomes[cleanKey(s)]||s;
   }).filter(Boolean).join(', ');
 }
+function listaValores(v){
+  return String(v||'').split(/[;,]/).map(function(x){return x.trim();}).filter(Boolean);
+}
+function horariosPareadosExport(a){
+  var dias=listaValores((a&&(a.diasSemana||a.diassemana))||'');
+  var hors=listaValores((a&&(a.horarios))||'');
+  if(!dias.length)return hors.join(', ');
+  if(hors.length===1&&dias.length>1)return dias.map(function(){return hors[0];}).join(', ');
+  return hors.slice(0,dias.length).join(', ');
+}
 function alunoExportValue(a,f){
   if(f==='plano')return (a&&(a.databaseAlunos||a.plano))||'';
   var v=a&&a[f];
@@ -1390,7 +1400,7 @@ function alunoExportValue(a,f){
   }
   if(f==='nascimento')return formatarNascimentoExport(v);
   if(f==='diasSemana')return formatarDiasSemanaExport(v);
-  if(f==='horarios')return normalizarListaImport(v);
+  if(f==='horarios')return horariosPareadosExport(a);
   return v;
 }
 function exportarAlunosExcel(){
@@ -3122,9 +3132,15 @@ function nivelConfigKey(nivel,config){
 function renderDiasHorariosWidget(selectedDias, selectedHors, nivel, idPrefix){
   var config = getDiasHorarios(nivel||'Iniciante');
   var dias = Object.keys(config);
-  var selDias = (selectedDias||'').split(',').map(function(d){return d.trim();});
+  var selDias = listaValores(selectedDias);
   var selDiasKeys = selDias.map(function(d){return cleanKey(d);});
-  var selHors = (selectedHors||'').split(',').map(function(h){return h.trim();});
+  var selHors = listaValores(selectedHors);
+  function horMarcado(dia,h){
+    var idx=selDiasKeys.indexOf(cleanKey(dia));
+    if(idx<0)return false;
+    if(selHors.length===1&&selDias.length>1)return selHors[0]===h;
+    return selHors[idx]===h;
+  }
 
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   dias.forEach(function(dia){
@@ -3137,7 +3153,7 @@ function renderDiasHorariosWidget(selectedDias, selectedHors, nivel, idPrefix){
     // Horários do dia (só aparecem se o dia estiver marcado)
     html += '<div id="'+idPrefix+'-hors-'+dia+'" style="display:'+(diaChecked?'flex':'none')+';flex-wrap:wrap;gap:6px;margin-top:6px">';
     hors.forEach(function(h){
-      var checked = selHors.indexOf(h)>=0;
+      var checked = horMarcado(dia,h);
       html += '<label style="display:flex;align-items:center;gap:5px;font-size:.78rem;background:#fff;border:1.5px solid '+(checked?'var(--g)':'var(--sand2)')+';border-radius:20px;padding:4px 11px;cursor:pointer">';
       html += '<input type="checkbox" class="'+idPrefix+'-hor" value="'+h+'" '+(checked?'checked':'')+' onchange="updateHorStyle(this)" style="display:none"> '+h;
       html += '</label>';
@@ -3163,9 +3179,16 @@ function updateHorStyle(cb){
 }
 
 function getDiasHorariosValue(prefix){
-  var dias = [...document.querySelectorAll('.'+prefix+'-dia:checked')].map(function(c){return c.value;}).join(', ');
-  var hors = [...document.querySelectorAll('.'+prefix+'-hor:checked')].map(function(c){return c.value;}).join(', ');
-  return {dias:dias, hors:hors};
+  var dias=[],hors=[];
+  [...document.querySelectorAll('.'+prefix+'-dia:checked')].forEach(function(c){
+    var wrap=document.getElementById(prefix+'-hors-'+c.value);
+    if(!wrap)return;
+    [...wrap.querySelectorAll('.'+prefix+'-hor:checked')].forEach(function(h){
+      dias.push(c.value);
+      hors.push(h.value);
+    });
+  });
+  return {dias:dias.join(', '), hors:hors.join(', ')};
 }
 
 
@@ -3415,9 +3438,15 @@ function renderMeusDias(el, u){
   var temDias = isPlanoDias(u);
   var maxD = maxDiasSemana(plano);
   var diasDisp = diasPermitidos(plano);
-  var selDias = (u.diasSemana||'').split(',').map(function(d){return d.trim();}).filter(Boolean);
+  var selDias = listaValores(u.diasSemana);
   var selDiasKeys = selDias.map(function(d){return cleanKey(d);});
-  var selHors = (u.horarios||'').split(',').map(function(h){return h.trim();}).filter(Boolean);
+  var selHors = listaValores(u.horarios);
+  function horMarcado(dia,h){
+    var idx=selDiasKeys.indexOf(cleanKey(dia));
+    if(idx<0)return false;
+    if(selHors.length===1&&selDias.length>1)return selHors[0]===h;
+    return selHors[idx]===h;
+  }
   var cadastroPendente = statusEfetivo(u)==='Aguardando Aprovação';
   var bloqueado = !!(maxD && selDias.length && selHors.length===maxD && !u.permitirEditarHorarios && !cadastroPendente);
 
@@ -3460,7 +3489,7 @@ function renderMeusDias(el, u){
       html+='<div id="meusdias-hors-'+dia+'" style="display:'+(diaChecked?'flex':'none')
         +';flex-wrap:wrap;gap:8px;margin-top:10px;padding-top:6px;border-top:1px solid rgba(0,0,0,.06)">';
       hors.forEach(function(h){
-        var checked = selHors.indexOf(h)>=0;
+        var checked = horMarcado(dia,h);
         html+='<label style="display:flex;align-items:center;gap:5px;font-size:.80rem;background:#fff'
           +';border:1.5px solid '+(checked?'var(--g)':'var(--sand2)')
           +';border-radius:20px;padding:5px 13px;cursor:pointer;user-select:none">';
@@ -3533,11 +3562,18 @@ async function salvarMeusDias(){
   var jaCompleto=maxH&&listaCampo(alunos[idx].horarios).length===maxH&&listaCampo(alunos[idx].diasSemana).length>0;
   var cadastroPendente=statusEfetivo(alunos[idx])==='Aguardando Aprovação';
   if(jaCompleto&&!alunos[idx].permitirEditarHorarios&&!cadastroPendente){toast('Seus dias e horários já estão salvos. Solicite alteração para mudar.','w');return;}
-  var diasEls=[...document.querySelectorAll('.meusdias-dia:checked')];
-  var horEls=[...document.querySelectorAll('.meusdias-hor:checked')];
-  if(maxH&&horEls.length!==maxH){toast('Selecione exatamente '+maxH+' horário'+(maxH!==1?'s':'')+' para o seu plano','e');return;}
-  var dias=diasEls.map(function(c){return c.value;}).join(', ');
-  var hors=horEls.map(function(c){return c.value;}).join(', ');
+  var diasArr=[],horsArr=[];
+  [...document.querySelectorAll('.meusdias-dia:checked')].forEach(function(c){
+    var wrap=document.getElementById('meusdias-hors-'+c.value);
+    if(!wrap)return;
+    [...wrap.querySelectorAll('.meusdias-hor:checked')].forEach(function(h){
+      diasArr.push(c.value);
+      horsArr.push(h.value);
+    });
+  });
+  if(maxH&&horsArr.length!==maxH){toast('Selecione exatamente '+maxH+' horário'+(maxH!==1?'s':'')+' para o seu plano','e');return;}
+  var dias=diasArr.join(', ');
+  var hors=horsArr.join(', ');
   var patch={diasSemana:dias,horarios:hors};
   if(!cadastroPendente){
     patch.permitirEditarHorarios=false;
@@ -3900,11 +3936,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
-
-
-
-
 
 
 
