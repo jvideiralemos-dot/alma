@@ -1369,6 +1369,13 @@ function formatarNascimentoExport(v){
   }
   return v;
 }
+function formatarDiasSemanaExport(v){
+  var nomes={segunda:'Segunda',terca:'Terça',quarta:'Quarta',quinta:'Quinta',sexta:'Sexta',sabado:'Sábado',domingo:'Domingo'};
+  return String(v||'').split(/[;,]/).map(function(x){
+    var s=x.trim();
+    return nomes[cleanKey(s)]||s;
+  }).filter(Boolean).join(', ');
+}
 function alunoExportValue(a,f){
   var v=a&&a[f];
   if((v===undefined||v==='')&&a){
@@ -1381,7 +1388,8 @@ function alunoExportValue(a,f){
     });
   }
   if(f==='nascimento')return formatarNascimentoExport(v);
-  if(f==='diasSemana'||f==='horarios')return normalizarListaImport(v);
+  if(f==='diasSemana')return formatarDiasSemanaExport(v);
+  if(f==='horarios')return normalizarListaImport(v);
   return v;
 }
 function exportarAlunosExcel(){
@@ -3112,12 +3120,13 @@ function renderDiasHorariosWidget(selectedDias, selectedHors, nivel, idPrefix){
   var config = getDiasHorarios(nivel||'Iniciante');
   var dias = Object.keys(config);
   var selDias = (selectedDias||'').split(',').map(function(d){return d.trim();});
+  var selDiasKeys = selDias.map(function(d){return cleanKey(d);});
   var selHors = (selectedHors||'').split(',').map(function(h){return h.trim();});
 
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   dias.forEach(function(dia){
     var hors = config[dia];
-    var diaChecked = selDias.indexOf(dia)>=0;
+    var diaChecked = selDiasKeys.indexOf(cleanKey(dia))>=0;
     html += '<div style="background:var(--sand3);border-radius:9px;padding:10px 13px">';
     html += '<label style="display:flex;align-items:center;gap:8px;font-size:.84rem;font-weight:500;cursor:pointer;margin-bottom:'+(diaChecked?'8px':'0')+'" id="'+idPrefix+'-dlbl-'+dia+'">';
     html += '<input type="checkbox" class="'+idPrefix+'-dia" value="'+dia+'" '+(diaChecked?'checked':'')+' onchange="toggleDiaHor(this,\''+idPrefix+'\')" style="width:16px;height:16px;accent-color:var(--g)"> '+dia;
@@ -3404,6 +3413,7 @@ function renderMeusDias(el, u){
   var maxD = maxDiasSemana(plano);
   var diasDisp = diasPermitidos(plano);
   var selDias = (u.diasSemana||'').split(',').map(function(d){return d.trim();}).filter(Boolean);
+  var selDiasKeys = selDias.map(function(d){return cleanKey(d);});
   var selHors = (u.horarios||'').split(',').map(function(h){return h.trim();}).filter(Boolean);
   var cadastroPendente = statusEfetivo(u)==='Aguardando Aprovação';
   var bloqueado = !!(maxD && selDias.length && selHors.length===maxD && !u.permitirEditarHorarios && !cadastroPendente);
@@ -3436,7 +3446,7 @@ function renderMeusDias(el, u){
   html+='<div style="display:flex;flex-direction:column;gap:10px" id="meusdias-wrap">';
 
   diasDisp.forEach(function(dia){
-    var diaChecked = selDias.indexOf(dia)>=0;
+    var diaChecked = selDiasKeys.indexOf(cleanKey(dia))>=0;
     var hors = horsPorDia[dia]||[];
     html+='<div style="background:var(--sand3);border-radius:9px;padding:10px 13px">';
     html+='<label style="display:flex;align-items:center;gap:8px;font-size:.88rem;font-weight:500;cursor:pointer;user-select:none">';
@@ -3887,9 +3897,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
-
-
 
 
 
