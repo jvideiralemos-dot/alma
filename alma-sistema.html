@@ -2288,11 +2288,40 @@ function cancelarCI(turmaId,dia){
 
 /* == TURMAS == */
 function pgTurmas(el){
-  const turmas=GT().sort((a,b)=>a.dia>b.dia?1:-1);
+  const filtroData=document.getElementById('ft-data')?.value||'';
+  const filtroHorario=document.getElementById('ft-horario')?.value||'';
+  const filtroStatus=document.getElementById('ft-status')?.value||'';
+  const todasTurmas=[...GT()].sort((a,b)=>a.dia===b.dia?(a.horario>b.horario?1:-1):(a.dia>b.dia?1:-1));
+  const horariosTurmas=[...new Set(todasTurmas.map(t=>t.horario).filter(Boolean))].sort();
+  const turmas=todasTurmas.filter(t=>{
+    if(filtroData&&t.dia!==filtroData)return false;
+    if(filtroHorario&&t.horario!==filtroHorario)return false;
+    if(filtroStatus){
+      const st=t.status==='cancelada'?'cancelada':'ativa';
+      if(st!==filtroStatus)return false;
+    }
+    return true;
+  });
   el.innerHTML=`
   <div class="pg-title">Turmas & Vagas</div>
   <div class="pg-sub">Configure horários, vagas e gerencie cancelamentos</div>
   <button class="btn btn-g" style="margin-bottom:16px" onclick="modalNovaTurma()">+ Nova turma</button>
+  <div class="card cp" style="margin-bottom:16px">
+    <div class="card-title">Filtros</div>
+    <div class="form-grid" style="margin-bottom:12px">
+      <div class="fg"><label>Data</label><input id="ft-data" type="date" value="${filtroData}" onchange="pgTurmas(document.getElementById('main-content'))"></div>
+      <div class="fg"><label>Horário</label><select id="ft-horario" onchange="pgTurmas(document.getElementById('main-content'))">
+        <option value="">Todos</option>
+        ${horariosTurmas.map(h=>`<option value="${h}" ${filtroHorario===h?'selected':''}>${h}</option>`).join('')}
+      </select></div>
+      <div class="fg"><label>Status</label><select id="ft-status" onchange="pgTurmas(document.getElementById('main-content'))">
+        <option value="">Todos</option>
+        <option value="ativa" ${filtroStatus==='ativa'?'selected':''}>Ativa</option>
+        <option value="cancelada" ${filtroStatus==='cancelada'?'selected':''}>Cancelada</option>
+      </select></div>
+    </div>
+    <button class="btn btn-gh btn-sm" onclick="limparFiltrosTurmas()">Limpar filtros</button>
+  </div>
   <div class="card tbl-wrap" style="margin-bottom:16px">
     <table><thead><tr><th>Data</th><th>Horário</th><th>Label</th><th>Vagas</th><th>Ocup.</th><th>Status</th><th>Ações</th></tr></thead>
     <tbody>
@@ -2314,7 +2343,7 @@ function pgTurmas(el){
           <button class="btn btn-r btn-sm" onclick="excluirTurma('${t.id}')">🗑</button>
         </td>
       </tr>`;
-    }).join(''):'<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">Nenhuma turma</td></tr>'}
+    }).join(''):`<tr><td colspan="7" style="text-align:center;padding:20px;color:var(--muted)">${todasTurmas.length?'Nenhuma turma encontrada com esses filtros':'Nenhuma turma'}</td></tr>`}
     </tbody></table>
   </div>
   <div class="card cp">
@@ -2332,6 +2361,15 @@ function pgTurmas(el){
     <div class="fg" style="margin-bottom:14px;max-width:150px"><label>Vagas por turma</label><input id="lt-v" type="number" value="16" min="1"></div>
     <button class="btn btn-g" onclick="criarLote()">Criar turmas</button>
   </div>`;
+}
+function limparFiltrosTurmas(){
+  const data=document.getElementById('ft-data');
+  const horario=document.getElementById('ft-horario');
+  const status=document.getElementById('ft-status');
+  if(data)data.value='';
+  if(horario)horario.value='';
+  if(status)status.value='';
+  pgTurmas(document.getElementById('main-content'));
 }
 function modalNovaTurma(){
   modal('Nova Turma',''
@@ -3935,7 +3973,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
 
 
 
