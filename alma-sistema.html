@@ -2418,12 +2418,11 @@ function criarLote(){
   if(isNaN(ini.getTime())||isNaN(fim.getTime())){toast('Datas inválidas','e');return;}
   if(!dias.length){toast('Selecione os dias','e');return;}
   if(!hors.length){toast('Informe os horários','e');return;}
-  const mapD={Segunda:1,Terca:2,Quarta:3,Quinta:4,Sexta:5,Sabado:6};
+  const nomesDias=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
   const turmas=GT();let n=0;
   const cur=new Date(ini);
   while(cur<=fim){
-    const dow=cur.getDay();
-    const ds=Object.keys(mapD).find(k=>mapD[k]===dow);
+    const ds=nomesDias[cur.getDay()];
     if(ds&&dias.includes(ds)){
       const dStr=cur.toISOString().split('T')[0];
       hors.forEach(h=>{
@@ -3936,7 +3935,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
 
 
 
