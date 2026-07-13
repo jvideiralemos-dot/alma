@@ -1377,14 +1377,14 @@ function formatarDiasSemanaExport(v){
   }).filter(Boolean).join(', ');
 }
 function listaValores(v){
-  return String(v||'').split(/[;,]/).map(function(x){return x.trim();}).filter(Boolean);
+  return String(v||'').split(/[;,|]/).map(function(x){return x.trim();}).filter(Boolean);
 }
 function horariosPareadosExport(a){
   var dias=listaValores((a&&(a.diasSemana||a.diassemana))||'');
   var hors=listaValores((a&&(a.horarios))||'');
-  if(!dias.length)return hors.join(', ');
-  if(hors.length===1&&dias.length>1)return dias.map(function(){return hors[0];}).join(', ');
-  return hors.slice(0,dias.length).join(', ');
+  if(!dias.length)return hors.join(' | ');
+  if(hors.length===1&&dias.length>1)return dias.map(function(){return hors[0];}).join(' | ');
+  return hors.slice(0,dias.length).join(' | ');
 }
 function alunoExportValue(a,f){
   if(f==='plano')return (a&&(a.databaseAlunos||a.plano))||'';
@@ -1433,7 +1433,7 @@ function alunoHeaderCanon(h){
   return ALUNO_FIELD_MAP[key]||h;
 }
 function normalizarListaImport(v){
-  return String(v||'').split(/[;,]/).map(function(x){return x.trim();}).filter(Boolean).join(', ');
+  return String(v||'').split(/[;,|]/).map(function(x){return x.trim();}).filter(Boolean).join(', ');
 }
 function normalizarVencimentoImport(v){
   return String(v||'').trim();
@@ -3936,7 +3936,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
 
 
 
