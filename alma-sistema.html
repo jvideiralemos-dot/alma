@@ -459,8 +459,13 @@ function normalizarDataInput(valor){
   var v=String(valor||'').trim();
   if(!v)return '';
   if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v;
-  var m=v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if(m)return m[3]+'-'+m[2]+'-'+m[1];
+  var m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m){
+    var a=parseInt(m[1]),b=parseInt(m[2]);
+    var dia=a,mes=b;
+    if(a<=12&&b>12){dia=b;mes=a;}
+    return m[3]+'-'+String(mes).padStart(2,'0')+'-'+String(dia).padStart(2,'0');
+  }
   return v;
 }
 function alunoFromDb(row){
@@ -598,7 +603,6 @@ const SA = (arr) => {
     (async () => { for (const a of changed) { await upsertAluno(a); } })();
   }
 };
-
 // Checkins
 const GC = () => _cache.checkins || [];
 const SC = (arr) => {
@@ -786,24 +790,19 @@ async function initDB() {
 
 function salvarMetodoPagamento(){
   var met = document.getElementById('pag-m').value;
-  var venc = document.getElementById('pag-venc') ? document.getElementById('pag-venc').value : '';
   if(!met){toast('Selecione um método','e');return;}
-  if(!venc){toast('Selecione o dia de vencimento','e');return;}
   var alunos=GA();var idx=alunos.findIndex(function(a){return a.id===CU.id;});if(idx<0)return;
-  if(alunos[idx].metodoPagamento&&alunos[idx].vencMensalidade){
-    toast('Pagamento e vencimento já foram definidos. Envie uma solicitação para alterar.','w');
-    abrirSolicitacaoAluno('alteracao_vencimento');
+  if(alunos[idx].metodoPagamento){
+    toast('Método de pagamento já definido. Envie uma solicitação para alterar.','w');
     return;
   }
   var antigo = alunos[idx].metodoPagamento;
-  var vencAntigo = alunos[idx].vencMensalidade;
   alunos[idx].metodoPagamento = met;
-  alunos[idx].vencMensalidade = venc;
   CU = alunos[idx]; SA(alunos);
-  if(antigo !== met || String(vencAntigo||'') !== String(venc||'')){
-    addLog('edit_pagamento',{metodo:met,vencimento:venc});
+  if(antigo !== met){
+    addLog('edit_pagamento',{metodo:met});
   }
-  toast('Pagamento e vencimento salvos!','s');
+  toast('Método de pagamento salvo!','s');
   pgPagamento(document.getElementById('main-content'));
 }
 
@@ -876,7 +875,7 @@ const PARAMETROS_DEFAULT={
     {nome:'Sábado',valor:65,tipo:'crédito unitário',quantidade:1,periodo:'conforme compra/cadastro',diasPermitidos:'somente sábado',validade:'2 meses',alunoPodeSolicitar:false,multiploMesmoDia:true,aulasSemana:0,ativo:true},
     {nome:'Parceria',valor:0,tipo:'condição interna',quantidade:0,periodo:'-',diasPermitidos:'-',validade:'-',alunoPodeSolicitar:false,aulasSemana:0,ativo:true}
   ],
-  vencimentos:[3,15,30],
+  vencimentos:[5,15,30],
   metodosPagamento:['Pix','Cartão de Crédito'],
   niveis:['Iniciante','Intermediário','Avançado'],
   regras:{checkinManhaLimite:'21:00',checkinOutrosLimite:'15:00',reposicaoExpiraDias:14,pacoteValidadeMeses:2,nivelInicial:'Iniciante',senhaPadrao:'123456',pixInfo:'Pix CNPJ: 45.373.079/0001-34 · Titular: Alma Rio',saldoStatusPrazos:{viagem:{valor:2,unidade:'meses'},lesao:{valor:3,unidade:'meses'},inativo:{valor:1,unidade:'meses'},bloqueado:{valor:1,unidade:'meses'}},textos:{checkin:'O check-in respeita as regras de prazo, saldo e disponibilidade de cada turma.',niveis:'A gestão define o nível de cada aluno e as turmas disponíveis para cada categoria.',saldo:'O saldo de aulas é calculado conforme o plano, o vencimento e as regras vigentes.',pacotes:'Pacotes têm validade própria e cada check-in consome uma aula do pacote.',inadimplencia:'Com pendência financeira, o check-in fica temporariamente bloqueado até a regularização.'}},
@@ -911,7 +910,10 @@ function ensureParametros(){
 function GP(){return ensureParametros();}
 // SP definido no bloco Supabase
 function paramPlanos(todos){var p=GP().planos||[];return todos?p:p.filter(function(x){return x.ativo!==false;});}
-function paramVencimentos(){return [3,15,30];}
+function paramVencimentos(){
+  var vals=(GP().vencimentos||[]).map(function(v){return parseInt(v);}).filter(Boolean);
+  return vals.length?vals:[5,15,30];
+}
 function paramMetodos(){return GP().metodosPagamento||[];}
 function paramNiveis(){return GP().niveis||[];}
 function paramRegras(){return GP().regras||PARAMETROS_DEFAULT.regras;}
@@ -1066,11 +1068,12 @@ function toggleLoginSenha(){
   DB.set('session_token',token);
   if(isG()){
     try{
-      const [alunos, checkins, turmas, sols, repos] = await Promise.all([
-        fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos()
+      const [alunos, checkins, turmas, sols, repos, cfgParametros] = await Promise.all([
+        fetchAlunos(), fetchCheckins(), fetchTurmas(), fetchSolicitacoes(), fetchRepos(), fetchParametro('parametros')
       ]);
       _cache.alunos=alunos; _cache.checkins=checkins; _cache.turmas=turmas;
       _cache.solicitacoes=sols; _cache.repos=repos; _cache.logs=[]; snapAll();
+      if(cfgParametros&&typeof cfgParametros==='object')DB.set('parametros',cfgParametros);
     }catch(e){console.error('Erro ao carregar dados do painel:',e);}
   } else {
     _cache.alunos=[CU];
@@ -1346,19 +1349,46 @@ function filtAlunos(){
 }
 
 
-const ALUNO_EXPORT_FIELDS=['id','timestamp','nome','telefone','cpf','email','nascimento','vencMensalidade','nivel','plano','diasSemana','horarios','comoConheceu','genero','status','databaseAlunos','motivoInativo','ct','observacao','perfil','senha','pacoteAulas','metodoPagamento','fotosLink','checkinLiberado','aulas_avulsas','aulas_repos','pacoteExpira','permitirEditarHorarios','horariosAlteracaoAprovada'];
+const ALUNO_EXPORT_FIELDS=['id','timestamp','nome','telefone','cpf','email','nascimento','vencMensalidade','nivel','plano','diasSemana','horarios','comoConheceu','genero','status','databaseAlunos','motivoInativo','ct','observacao','perfil','senha','pacoteAulas','metodoPagamento','fotosLink','checkinLiberado','aulas_avulsas','aulas_repos','pacoteExpira','permitirEditarHorarios','horariosAlteracaoAprovada','pausaInicioEm','matriculaViaSite','subcategoria'];
 function csvEscape(v){
   v=v==null?'':String(v);
   var nl=String.fromCharCode(10),cr=String.fromCharCode(13);
   return (v.indexOf(';')>=0||v.indexOf('"')>=0||v.indexOf(nl)>=0||v.indexOf(cr)>=0)?'"'+v.replace(/"/g,'""')+'"':v;
 }
+function formatarNascimentoExport(v){
+  v=String(v||'').trim();
+  if(!v)return '';
+  var m=v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m)return m[3]+'/'+m[2]+'/'+m[1];
+  m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m){
+    var a=parseInt(m[1]),b=parseInt(m[2]);
+    var dia=a,mes=b;
+    if(a<=12&&b>12){dia=b;mes=a;}
+    return String(dia).padStart(2,'0')+'/'+String(mes).padStart(2,'0')+'/'+m[3];
+  }
+  return v;
+}
+function alunoExportValue(a,f){
+  var v=a&&a[f];
+  if((v===undefined||v==='')&&a){
+    Object.entries(ALUNO_FIELD_MAP).some(function(pair){
+      if(pair[1]===f&&(a[pair[0]]!==undefined&&a[pair[0]]!=='')){
+        v=a[pair[0]];
+        return true;
+      }
+      return false;
+    });
+  }
+  if(f==='nascimento')return formatarNascimentoExport(v);
+  if(f==='diasSemana'||f==='horarios')return normalizarListaImport(v);
+  return v;
+}
 function exportarAlunosExcel(){
   var rows=GA();
-  var extra=[];
-  rows.forEach(function(a){Object.keys(a).forEach(function(k){if(ALUNO_EXPORT_FIELDS.indexOf(k)<0&&extra.indexOf(k)<0)extra.push(k);});});
-  var fields=ALUNO_EXPORT_FIELDS.concat(extra);
+  var fields=ALUNO_EXPORT_FIELDS;
   var nl=String.fromCharCode(10);
-  var csv=String.fromCharCode(65279)+fields.join(';')+nl+rows.map(function(a){return fields.map(function(f){return csvEscape(a[f]);}).join(';');}).join(nl);
+  var csv=String.fromCharCode(65279)+fields.join(';')+nl+rows.map(function(a){return fields.map(function(f){return csvEscape(alunoExportValue(a,f));}).join(';');}).join(nl);
   var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
   var a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -1378,16 +1408,35 @@ function parseCsvLine(line,sep){
   }
   out.push(cur);return out;
 }
+function alunoHeaderCanon(h){
+  h=String(h||'').trim();
+  var key=h.toLowerCase();
+  return ALUNO_FIELD_MAP[key]||h;
+}
+function normalizarListaImport(v){
+  return String(v||'').split(/[;,]/).map(function(x){return x.trim();}).filter(Boolean).join(', ');
+}
+function normalizarVencimentoImport(v){
+  return String(v||'').trim();
+}
 function parseCsv(text){
   var nl=String.fromCharCode(10),cr=String.fromCharCode(13);
   text=String(text||'').replace(/^ï»¿/,'').split(cr+nl).join(nl).split(cr).join(nl).trim();
   if(!text)return[];
   var lines=text.split(nl).filter(function(l){return l.trim()!=='';});
   var sep=(lines[0].split(';').length>=lines[0].split(',').length)?';':',';
-  var headers=parseCsvLine(lines.shift(),sep).map(function(h){return h.trim();});
+  var headers=parseCsvLine(lines.shift(),sep).map(alunoHeaderCanon);
   return lines.map(function(line){
     var vals=parseCsvLine(line,sep),obj={};
-    headers.forEach(function(h,i){obj[h]=vals[i]||'';});
+    headers.forEach(function(h,i){
+      var val=vals[i]||'';
+      if(obj[h]===undefined||obj[h]==='')obj[h]=val;
+    });
+    obj=alunoFromDb(obj);
+    obj.vencMensalidade=normalizarVencimentoImport(obj.vencMensalidade);
+    if(obj.diasSemana!==undefined)obj.diasSemana=normalizarListaImport(obj.diasSemana);
+    if(obj.horarios!==undefined)obj.horarios=normalizarListaImport(obj.horarios);
+    if(obj.nascimento!==undefined)obj.nascimento=normalizarDataInput(obj.nascimento);
     if(obj.pacoteAulas!==undefined)obj.pacoteAulas=parseInt(obj.pacoteAulas)||0;
     if(obj.aulas_avulsas!==undefined)obj.aulas_avulsas=parseInt(obj.aulas_avulsas)||0;
     if(obj.checkinLiberado==='true')obj.checkinLiberado=true;
@@ -2662,7 +2711,7 @@ function pgPagamento(el){
   var u=CU;
   var planoNome=u.databaseAlunos||u.plano||'';
   var valorPlano=planoValor(planoNome);
-  var pagamentoTravado=!!(u.metodoPagamento&&u.vencMensalidade);
+  var pagamentoTravado=!!u.metodoPagamento;
   var metodOpts=metodoOptions(u.metodoPagamento||'', 'Selecione');
   var vencOpts=vencOptions(u.vencMensalidade||'', 'Selecione');
   var pixInfo=paramRegras().pixInfo||'';
@@ -2671,9 +2720,9 @@ function pgPagamento(el){
     +'<div class="pg-sub">Informações do seu plano e pagamento</div>'
     +'<div class="card cp" style="max-width:520px;margin-bottom:16px"><div class="card-title">Plano atual</div><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px"><div><div style="font-size:1.4rem;font-weight:600;color:var(--g)">'+(planoNome||'Sem plano')+'</div><div style="font-size:.8rem;color:var(--muted);margin-top:3px">Vencimento: Dia '+(u.vencMensalidade||'—')+'</div>'+(u.pacoteAulas>0?'<div style="font-size:.82rem;color:var(--g);margin-top:4px">'+u.pacoteAulas+' aulas no pacote'+(u.pacoteExpira?' · vence '+u.pacoteExpira.split('-').reverse().join('/'):'')+'</div>':'')+'</div>'+(valorPlano>0?'<div style="text-align:right"><div style="font-size:.72rem;color:var(--muted)">Valor mensal</div><div style="font-size:1.8rem;font-family:Cormorant Garamond,serif;font-weight:400;color:var(--g)">R$ '+valorPlano+'</div></div>':'')+'</div></div>'
     +'<div class="card cp" style="max-width:520px"><div class="card-title">Forma de pagamento</div>'
-    +'<div class="form-grid" style="margin-bottom:14px"><div class="fg"><label>Método</label><select id="pag-m" '+(pagamentoTravado?'disabled':'')+'>'+metodOpts+'</select></div><div class="fg"><label>Vencimento</label><select id="pag-venc" '+(pagamentoTravado?'disabled':'')+'>'+vencOpts+'</select></div></div>'
+    +'<div class="form-grid" style="margin-bottom:14px"><div class="fg"><label>Método</label><select id="pag-m" '+(pagamentoTravado?'disabled':'')+'>'+metodOpts+'</select></div><div class="fg"><label>Vencimento</label><select id="pag-venc" disabled>'+vencOpts+'</select></div></div>'
     +'<div style="background:var(--sand3);border-radius:9px;padding:12px 13px;margin-bottom:12px"><p style="font-size:.8rem;color:var(--muted);line-height:1.7">'+esc(pixInfo)+'</p></div>'
-    +(pagamentoTravado?'<button class="btn btn-gh" onclick="abrirSolicitacaoAluno(\'alteracao_vencimento\')">Solicitar alteração</button>':'<button class="btn btn-g" onclick="salvarMetodoPagamento()">Salvar</button>')+'</div>';
+    +(pagamentoTravado?'<button class="btn btn-gh" onclick="abrirSolicitacaoAluno(\'alteracao_vencimento\')">Solicitar alteração</button>':'<button class="btn btn-g" onclick="salvarMetodoPagamento()">Salvar método</button>')+'</div>';
 }
 /* == FOTOS == */
 function pgFotos(el){
@@ -3303,12 +3352,7 @@ function verificarAlertasSaldoStatus(){
 /* == EXTRAS V2 == */
 function setPacoteExpira(){var d=new Date();d.setMonth(d.getMonth()+(parseInt(paramRegras().pacoteValidadeMeses)||2));return d.toISOString().split('T')[0];}
 function vencimentoDefaultMatricula(dataRef){
-  var d=dataRef?new Date(dataRef):new Date();
-  var dia=d.getDate();
-  if(dia<=3)return '3';
-  if(dia<=15)return '15';
-  if(dia<=30)return '30';
-  return '3';
+  return '';
 }
 
 function registrarMatriculaPendente(dados){
@@ -3843,19 +3887,6 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
