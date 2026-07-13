@@ -1971,7 +1971,9 @@ function renderTurmasCI(){
   var meusCIs=cis.filter(function(c){return c.dia===dia&&c.userId===CU.id&&c.status!=='cancelado';});
 
   var avisoSaldo='';
-  if(!isG()&&saldo!==999){
+  if(!isG()&&!controlaSaldoAluno(CU)){
+    avisoSaldo='<div class="alerta alerta-g" style="margin-bottom:12px"><strong>Seu check-in é livre de saldo.</strong> Pode escolher suas aulas sem se preocupar com contagem de saldo 💛</div>';
+  }else if(!isG()&&saldo!==999){
     var cor=saldo<=0?'alerta-r':saldo<=2?'alerta-a':'alerta-g';
     avisoSaldo='<div class="alerta '+cor+'" style="margin-bottom:12px">Saldo disponível: <strong>'+saldo+' aula'+(saldo!==1?'s':'')+'</strong></div>';
   }
@@ -2869,6 +2871,44 @@ function salvarFoto(){
 function pgSaldo(el){
   var u=CU;
   expirarReposicoes(u);
+  if(!controlaSaldoAluno(u)){
+    var perfilLivre=cleanKey(u.perfil)==='matina';
+    var motivoLivre=perfilLivre?'Perfil Matina':(cleanKey(u.nivel).includes('avanc')?'Nível Avançado':'Check-in livre');
+    el.innerHTML=''
+      +'<div class="pg-title">Minhas Aulas</div>'
+      +'<div class="card cp" style="margin-bottom:20px">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">'
+          +'<div>'
+            +'<div style="font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:4px">'+motivoLivre+'</div>'
+            +'<div style="font-size:1.35rem;font-family:Cormorant Garamond,serif;color:var(--g);line-height:1.15">Check-ins livres de saldo</div>'
+            +'<div style="font-size:.84rem;color:var(--muted);margin-top:6px">Você pode treinar sem se preocupar com contagem de aulas. Seu histórico continua aparecendo aqui para acompanhar sua frequência.</div>'
+          +'</div>'
+          +'<span class="badge b-ativa">Livre</span>'
+        +'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+        +'<input type="date" id="saldo-ini" style="flex:1;min-width:120px;height:36px;border:1.5px solid var(--sand2);border-radius:8px;padding:0 10px;font-size:.83rem;outline:none">'
+        +'<input type="date" id="saldo-fim" style="flex:1;min-width:120px;height:36px;border:1.5px solid var(--sand2);border-radius:8px;padding:0 10px;font-size:.83rem;outline:none">'
+        +'<button class="btn btn-gh btn-sm" id="saldo-filtrar">Filtrar</button>'
+        +'<button class="btn btn-gh btn-sm" id="saldo-limpar">Limpar</button>'
+      +'</div>'
+      +'<div class="card">'
+        +'<div class="cp" style="border-bottom:1px solid var(--sand2);display:flex;align-items:center;justify-content:space-between">'
+          +'<strong>Histórico</strong><span style="font-size:.75rem;color:var(--muted)" id="hist-count"></span>'
+        +'</div>'
+        +'<div id="historico-saldo"></div>'
+      +'</div>';
+    var btnFLivre=document.getElementById('saldo-filtrar');
+    var btnLLivre=document.getElementById('saldo-limpar');
+    if(btnFLivre)btnFLivre.onclick=renderHistoricoSaldo;
+    if(btnLLivre)btnLLivre.onclick=function(){
+      document.getElementById('saldo-ini').value='';
+      document.getElementById('saldo-fim').value='';
+      renderHistoricoSaldo();
+    };
+    renderHistoricoSaldo();
+    return;
+  }
   var venc=parseInt(u.vencMensalidade)||3;
   var periodo=getPeriodo(venc);
   var aulasSemanais=aulasPorSemana(u);
@@ -3020,6 +3060,7 @@ function pgSaldo(el){
 }
 
 function diaSemanaBR(dataStr){var d=new Date(dataStr+'T12:00:00');return ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'][d.getDay()]||'';}
+function capFirst(s){s=String(s||'');return s?s.charAt(0).toUpperCase()+s.slice(1):'';}
 function renderHistoricoSaldo(){
   var u=CU;
   var ini=document.getElementById('saldo-ini')?.value||'';
@@ -3036,12 +3077,13 @@ function renderHistoricoSaldo(){
   el.innerHTML=cis.length
     ?cis.map(function(c){
       var data=c.dia.split('-').reverse().join('/');
+      var diaSemana=capFirst(diaSemanaBR(c.dia));
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-bottom:1px solid var(--sand2);font-size:.83rem">'
         +'<div>'
-          +'<span style="font-weight:500">'+data+'</span>'
+          +'<span style="font-weight:500">'+diaSemana+', '+data+'</span>'
           +' <span style="color:var(--muted)">'+c.horario+'</span>'
         +'</div>'
-        +'<span class="badge b-ativa">'+(c.tipo==='pacote'?'pacote':c.tipo==='awa'?'awa':'normal')+'</span>'
+        +'<span class="badge b-ativa">'+(c.tipo==='pacote'?'pacote':c.tipo==='awa'?'awa':c.tipo==='livre'?'livre':'normal')+'</span>'
         +'</div>';
     }).join('')
     :'<div style="padding:20px 18px;color:var(--muted);font-size:.83rem;text-align:center">Nenhuma aula no período selecionado.</div>';
@@ -3296,11 +3338,12 @@ function checkinsPlanoNoPeriodo(alunoId,venc){
   var v=parseInt(venc)||3;
   var p=getPeriodo(v);
   return GC().filter(function(c){
-    return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr&&['pacote','avulsa','repos','gestor'].indexOf(c.tipo)===-1;
+    return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr&&['pacote','avulsa','repos','gestor','livre'].indexOf(c.tipo)===-1;
   }).length;
 }
 function tipoCheckinParaAluno(aluno,dia){
   if(!aluno)return'';
+  if(!controlaSaldoAluno(aluno))return 'livre';
   var pacote=(aluno.pacoteAulas||0)>0;
   var avulsa=avulsasDisponiveisAluno(aluno).length>0;
   var repos=reposicoesDisponiveisAluno(aluno).length>0;
@@ -3333,7 +3376,7 @@ function saldoTotalAulasAluno(aluno){
   return saldoPlano+repos+avulsas+pacote;
 }
 function saldoCheckinDisponivel(aluno,dia){
-  if(!controlaSaldoAluno(aluno)&&!isPacote(aluno)&&!isAvulsa(aluno)&&(parseInt(aluno&&aluno.pacoteAulas)||0)<=0&&!avulsasDisponiveisAluno(aluno||{}).length&&!reposicoesDisponiveisAluno(aluno||{}).length)return 999;
+  if(!controlaSaldoAluno(aluno))return 999;
   return saldoTotalAulasAluno(aluno);
 }
 function geradoEmReposicaoPeriodoAnterior(aluno){
@@ -3373,7 +3416,7 @@ function sincronizarCreditosGestao(aluno,qtdAvulsas,qtdRepos){
   SR(repos);
 }
 function isSabado(diaStr){if(!diaStr)return false;var d=new Date(diaStr+'T12:00:00');return d.getDay()===6;}
-function controlaSaldoAluno(a){if(a&&(a.perfil==='Parceiro'||a.perfil==='Matina'))return false;var lista=(paramCheckin().controlarSaldoNiveis||[]).map(function(n){return cleanKey(n);});var nivel=cleanKey(a&&a.nivel||'');return !nivel||lista.some(function(n){return nivel.includes(n)||n.includes(nivel);});}
+function controlaSaldoAluno(a){var perfil=cleanKey(a&&a.perfil||'');var nivel=cleanKey(a&&a.nivel||'');if(a&&(perfil==='parceiro'||perfil==='parceria'||perfil==='matina'||nivel.includes('avanc')))return false;var lista=(paramCheckin().controlarSaldoNiveis||[]).map(function(n){return cleanKey(n);}).filter(Boolean);return !nivel||lista.some(function(n){return nivel.includes(n)||n.includes(nivel);});}
 function niveisVisiveis(alunoOuNivel){
   var perfil=typeof alunoOuNivel==='object'?String(alunoOuNivel&&alunoOuNivel.perfil||''):'';
   var nivel=typeof alunoOuNivel==='object'?alunoOuNivel.nivel:alunoOuNivel;
@@ -3409,7 +3452,7 @@ function calcSaldoPeriodo(aluno){
 }
 function checkinsNoPeriodo(alunoId,venc){return checkinsPlanoNoPeriodo(alunoId,venc);}
 function saldoDisponivel(aluno){
-  if(!controlaSaldoAluno(aluno)&&!isPacote(aluno)&&!isAvulsa(aluno)&&(parseInt(aluno&&aluno.pacoteAulas)||0)<=0&&!avulsasDisponiveisAluno(aluno||{}).length&&!reposicoesDisponiveisAluno(aluno||{}).length)return 999;
+  if(!controlaSaldoAluno(aluno))return 999;
   return saldoTotalAulasAluno(aluno);
 }
 function expirarReposicoes(aluno){
@@ -3536,7 +3579,7 @@ function renderMeusDias(el, u){
 
   // Pacote / Avulso / sem plano dias: não precisa escolher
   if(!temDias||!maxD){
-    el.innerHTML='<div class="alerta alerta-b">Seu plano (<strong>'+plano+'</strong>) não requer dias fixos.<br>Você pode fazer check-in em qualquer turma disponível da sua categoria, respeitando seu saldo.</div>';
+    el.innerHTML='<div class="alerta alerta-b">Seu plano (<strong>'+plano+'</strong>) não requer dias fixos.<br>Você pode fazer check-in em qualquer turma disponível da sua categoria, seguindo as regras de prazo e disponibilidade.</div>';
     return;
   }
 
@@ -4020,5 +4063,3 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
-
