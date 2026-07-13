@@ -402,8 +402,13 @@ async function sbRpc(fnName, params={}) {
     'Content-Type': 'application/json'
   };
   const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(params), mode: 'cors' });
-  if (!res.ok) { const t = await res.text(); console.error('Supabase RPC erro:', res.status, t); return null; }
-  return res.json();
+  const t = await res.text();
+  if (!res.ok) {
+    console.error('Supabase RPC erro:', res.status, t);
+    throw new Error('Erro Supabase '+res.status+': '+(t||fnName));
+  }
+  if(!t)return null;
+  try{return JSON.parse(t);}catch(e){return t;}
 }
 
 // Busca uma lista de dados usando o token de sessão da gestora (RLS bloqueia acesso direto)
@@ -617,8 +622,11 @@ const SA = (arr) => {
     return (async () => {
       let synced=0;
       for (const a of changed) {
-        const res=await upsertAluno(a);
-        if(res===null)throw new Error('Falha ao sincronizar aluno: '+(a.nome||a.email||a.id));
+        try {
+          await upsertAluno(a);
+        } catch(e) {
+          throw new Error('Falha ao gravar o aluno "'+(a.nome||a.id)+'" ('+synced+' de '+changed.length+' j\u00e1 gravados): '+(e.message||e));
+        }
         snap[a.id] = JSON.stringify(a);
         synced++;
       }
@@ -1485,12 +1493,15 @@ function parseCsv(text){
     if(obj.nascimento!==undefined)obj.nascimento=normalizarDataInput(obj.nascimento);
     if(obj.pacoteAulas!==undefined)obj.pacoteAulas=parseInt(obj.pacoteAulas)||0;
     if(obj.aulas_avulsas!==undefined)obj.aulas_avulsas=parseInt(obj.aulas_avulsas)||0;
-    if(obj.checkinLiberado==='true')obj.checkinLiberado=true;
-    if(obj.checkinLiberado==='false')obj.checkinLiberado=false;
-    if(obj.permitirEditarHorarios==='true')obj.permitirEditarHorarios=true;
-    if(obj.permitirEditarHorarios==='false')obj.permitirEditarHorarios=false;
-    if(obj.horariosAlteracaoAprovada==='true')obj.horariosAlteracaoAprovada=true;
-    if(obj.horariosAlteracaoAprovada==='false')obj.horariosAlteracaoAprovada=false;
+    if(obj.aulas_repos!==undefined)obj.aulas_repos=parseInt(obj.aulas_repos)||0;
+    // Campos booleanos: converte texto -> boolean; se vier vazio, remove a chave
+    // (texto vazio quebra o cast p/ integer/boolean no jsonb_populate_record do Supabase)
+    ['checkinLiberado','permitirEditarHorarios','horariosAlteracaoAprovada','matriculaViaSite'].forEach(function(k){
+      var b=String(obj[k]===undefined||obj[k]===null?'':obj[k]).trim().toLowerCase();
+      if(b==='true'||b==='verdadeiro'||b==='sim'||b==='1')obj[k]=true;
+      else if(b==='false'||b==='falso'||b==='nao'||b==='n\u00e3o'||b==='0')obj[k]=false;
+      else delete obj[k];
+    });
     if(!obj.id)obj.id='aluno_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
     if(!obj.perfil)obj.perfil='Aluno';
     return obj;
@@ -4009,6 +4020,5 @@ function salvarRegrasMenu(){
 }</script>
 </body>
 </html>
-
 
 
