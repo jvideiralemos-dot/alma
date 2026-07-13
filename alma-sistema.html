@@ -2534,7 +2534,7 @@ function pgReposicao(el){
     <tbody>
     ${repos.length?repos.map(r=>`<tr>
       <td>${r.nomeAluno}</td>
-      <td style="font-size:.78rem">${r.origem==='turma_cancelada'?'Turma cancelada':'Solicitação'}</td>
+      <td style="font-size:.78rem">${r.origem==='turma_cancelada'?'Turma cancelada':r.origem==='saldo_ciclo'?'Saldo do ciclo anterior':'Solicitação'}</td>
       <td style="font-size:.78rem">${r.dia?fmtData(r.dia)+' '+r.horario:'—'}</td>
       <td>${r.status==='disponivel'?'<span class="badge b-ativa">Disponível</span>':r.status==='usada'?'<span class="badge b-inativo">Usada</span>':'—'}</td>
       <td>${r.status==='disponivel'?`<button class="btn btn-gh btn-sm" onclick="incluirReposicao('${r.id}')">📅 Incluir</button>`:'—'}</td>
@@ -2925,9 +2925,8 @@ function pgSaldo(el){
   var ehPacote=isPacote(u);
   var ehAWA=isAWA(u);
   var planoNome=u.databaseAlunos||u.plano||'';
-  var proxVenc=periodo.fim;
-  var expiraSaldo=new Date(proxVenc.getTime()+14*864e5);
-  var expiraStr=expiraSaldo.toISOString().split('T')[0].split('-').reverse().join('/');
+  var expiraRepos=repos.length?repos.map(function(r){return dataExpiraReposicao(r,u);}).sort(function(a,b){return a-b;})[0]:null;
+  var expiraStr=expiraRepos?expiraRepos.toISOString().split('T')[0].split('-').reverse().join('/'):'';
 
   var notaSabado='';
   var pendenteHtml=qtdPendente>0?'<div class="alerta alerta-a" style="font-size:.80rem;margin-top:8px">⏳ Compra aguardando aprovação: <strong>'+qtdPendente+' aula'+(qtdPendente!==1?'s':'')+'</strong>. Assim que a gestão aprovar, o saldo ficará liberado.</div>':'';
@@ -2992,7 +2991,7 @@ function pgSaldo(el){
               ?'<div style="margin-top:8px;height:5px;background:var(--sand2);border-radius:4px;overflow:hidden">'
                 +'<div style="height:100%;width:'+Math.min(100,Math.round(usadas/aulasDir*100))+'%;background:'+(usadas>=aulasDir?'var(--amber)':'var(--g)')+';border-radius:4px"></div>'
               +'</div>' :'')
-            +(saldoPeriodo>0?'<div style="font-size:.75rem;color:var(--muted);margin-top:6px">Expira em <strong>'+expiraStr+'</strong></div>':'')
+            +(repos.length>0?'<div style="font-size:.75rem;color:var(--muted);margin-top:6px">Reposição expira em <strong>'+expiraStr+'</strong></div>':'')
 
           +'</div>'
 
@@ -3338,7 +3337,7 @@ function checkinsPlanoNoPeriodo(alunoId,venc){
   var v=parseInt(venc)||3;
   var p=getPeriodo(v);
   return GC().filter(function(c){
-    return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr&&['pacote','avulsa','repos','gestor','livre'].indexOf(c.tipo)===-1;
+    return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=p.iniStr&&c.dia<=p.fimStr&&['pacote','avulsa','repos','reposicao','gestor','livre'].indexOf(c.tipo)===-1;
   }).length;
 }
 function tipoCheckinParaAluno(aluno,dia){
@@ -3356,12 +3355,12 @@ function tipoCheckinParaAluno(aluno,dia){
   }
   if(isPacote(aluno))return pacote?'pacote':'';
   if(isAWA(aluno))return 'awa';
+  if(repos)return 'repos';
   var aulasDir=calcSaldoPeriodo(aluno);
   var usadas=checkinsPlanoNoPeriodo(aluno.id,aluno.vencMensalidade);
   if(aulasDir>usadas)return 'normal';
   if(pacote)return 'pacote';
   if(avulsa)return 'avulsa';
-  if(repos)return 'repos';
   return '';
 }
 function saldoTotalAulasAluno(aluno){
@@ -3415,6 +3414,39 @@ function sincronizarCreditosGestao(aluno,qtdAvulsas,qtdRepos){
   ajustar('ajuste_gestao',Math.max(0,parseInt(qtdRepos)||0));
   SR(repos);
 }
+function periodoAnterior(vencNum){
+  var atual=getPeriodo(vencNum);
+  var ini=new Date(atual.ini.getFullYear(),atual.ini.getMonth()-1,parseInt(vencNum)||3,12,0,0,0);
+  var fim=new Date(atual.ini.getFullYear(),atual.ini.getMonth(),atual.ini.getDate()-1,12,0,0,0);
+  return{ini:ini,fim:fim,iniStr:ini.toISOString().split('T')[0],fimStr:fim.toISOString().split('T')[0]};
+}
+function aulasPeriodo(aluno,periodo){
+  var aps=aulasPorSemana(aluno);if(!aps)return 0;
+  var dias=Math.floor((periodo.fim-periodo.ini)/864e5)+1;
+  return Math.round(dias/7*aps);
+}
+function checkinsPlanoNoIntervalo(alunoId,iniStr,fimStr){
+  return GC().filter(function(c){
+    return c.userId===alunoId&&c.status!=='cancelado'&&c.dia>=iniStr&&c.dia<=fimStr&&['pacote','avulsa','repos','reposicao','gestor','livre'].indexOf(c.tipo)===-1;
+  }).length;
+}
+function gerarReposicoesSaldoAnterior(aluno){
+  if(!aluno||!controlaSaldoAluno(aluno)||isPacote(aluno)||isAvulsa(aluno)||!aulasPorSemana(aluno))return;
+  var venc=parseInt(aluno.vencMensalidade)||3;
+  var ant=periodoAnterior(venc);
+  var usadas=checkinsPlanoNoIntervalo(aluno.id,ant.iniStr,ant.fimStr);
+  if(usadas<=0)return;
+  var sobra=Math.max(0,aulasPeriodo(aluno,ant)-usadas);
+  if(sobra<=0)return;
+  var prefix='saldo_'+aluno.id+'_'+ant.iniStr+'_';
+  var repos=GR();
+  var existentes=repos.filter(function(r){return String(r.id||'').indexOf(prefix)===0;}).length;
+  if(existentes>=sobra)return;
+  for(var i=existentes;i<sobra;i++){
+    repos.push({id:prefix+i,userId:aluno.id,nomeAluno:aluno.nome,origem:'saldo_ciclo',status:'disponivel',geradoEm:ant.ini.toISOString()});
+  }
+  SR(repos);
+}
 function isSabado(diaStr){if(!diaStr)return false;var d=new Date(diaStr+'T12:00:00');return d.getDay()===6;}
 function controlaSaldoAluno(a){var perfil=cleanKey(a&&a.perfil||'');var nivel=cleanKey(a&&a.nivel||'');if(a&&(perfil==='parceiro'||perfil==='parceria'||perfil==='matina'||nivel.includes('avanc')))return false;var lista=(paramCheckin().controlarSaldoNiveis||[]).map(function(n){return cleanKey(n);}).filter(Boolean);return !nivel||lista.some(function(n){return nivel.includes(n)||n.includes(nivel);});}
 function niveisVisiveis(alunoOuNivel){
@@ -3438,17 +3470,15 @@ function getCutoff(dia,horario){
 function isLockedV2(dia,horario){return new Date()>getCutoff(dia,horario);}
 function getPeriodo(vencNum){
   var hoje=new Date();var ano=hoje.getFullYear();var mes=hoje.getMonth();
-  var ini=new Date(ano,mes,vencNum);
-  if(hoje<ini)ini=new Date(ano,mes-1,vencNum);
-  var fim=new Date(ini.getFullYear(),ini.getMonth()+1,vencNum);
-  return{ini:ini,fim:fim,iniStr:ini.toISOString().split('T')[0],fimStr:fim.toISOString().split('T')[0]};
+  var ini=new Date(ano,mes,vencNum,12,0,0,0);
+  if(hoje<ini)ini=new Date(ano,mes-1,vencNum,12,0,0,0);
+  var prox=new Date(ini.getFullYear(),ini.getMonth()+1,vencNum,12,0,0,0);
+  var fim=new Date(prox.getFullYear(),prox.getMonth(),prox.getDate()-1,12,0,0,0);
+  return{ini:ini,fim:fim,prox:prox,iniStr:ini.toISOString().split('T')[0],fimStr:fim.toISOString().split('T')[0],proxStr:prox.toISOString().split('T')[0]};
 }
 function calcSaldoPeriodo(aluno){
   var v=parseInt(aluno.vencMensalidade)||3;
-  var aps=aulasPorSemana(aluno);if(!aps)return 0;
-  var p=getPeriodo(v);
-  var dias=(p.fim-p.ini)/(864e5);
-  return Math.round(dias/7*aps);
+  return aulasPeriodo(aluno,getPeriodo(v));
 }
 function checkinsNoPeriodo(alunoId,venc){return checkinsPlanoNoPeriodo(alunoId,venc);}
 function saldoDisponivel(aluno){
@@ -3957,6 +3987,8 @@ function salvarParamRegras(){
 
 function pgRegras(el){
   var gestor=isG();
+  var reposExpiraDias=parseInt(paramRegras().reposicaoExpiraDias)||14;
+  var pacoteMeses=parseInt(paramRegras().pacoteValidadeMeses)||2;
   el.innerHTML=''
     +'<div class="pg-title">Regras do Alma</div>'
     +'<div class="pg-sub">Como funciona o sistema de aulas, check-in e saldo</div>'
@@ -3986,19 +4018,19 @@ function pgRegras(el){
     // Saldo
     +'<div class="card cp"><div class="card-title">💰 Saldo de Aulas (Mensalistas)</div>'
       +'<ul style="padding-left:18px;font-size:.87rem;color:var(--text);line-height:2.1">'
-        +'<li>Calculado de vencimento a vencimento (ex: dia 5/jun → dia 5/jul)</li>'
+        +'<li>Calculado do dia de vencimento até o dia anterior ao próximo vencimento</li>'
         +'<li>Use como quiser dentro do período — sem dias fixos obrigatórios</li>'
         +'<li>Cada semana tem a quantidade de aulas do seu plano (ex: 2x = 2 por semana)</li>'
         +'<li>Saldo não usado vira reposição após o vencimento</li>'
-        +'<li>Reposições expiram <strong>2 semanas após o próximo vencimento</strong></li>'
-        +'<li>Exemplo: venc. 5/jun → saldo de mai expira em 19/jul (5/jul + 14 dias)</li>'
+        +'<li>Reposições expiram <strong>'+reposExpiraDias+' dia'+(reposExpiraDias!==1?'s':'')+' após o próximo vencimento</strong></li>'
+        +'<li>Exemplo: venc. 5/jun → saldo do ciclo anterior expira no próximo vencimento + '+reposExpiraDias+' dia'+(reposExpiraDias!==1?'s':'')+'</li>'
         +'<li>Saldo atual só começa a expirar no vencimento seguinte</li>'
       +'</ul></div>'
 
     // Pacotes
     +'<div class="card cp"><div class="card-title">📦 Pacotes</div>'
       +'<ul style="padding-left:18px;font-size:.87rem;color:var(--text);line-height:2.1">'
-        +'<li>Validade de <strong>2 meses</strong> a partir da data de ativação</li>'
+        +'<li>Validade de <strong>'+pacoteMeses+' mese'+(pacoteMeses!==1?'s':'')+'</strong> a partir da data de ativação</li>'
         +'<li>Cada check-in consome uma aula do pacote</li>'
         +'<li>Use em qualquer turma disponível da sua categoria</li>'
         +'<li>Aulas não usadas expiram com o pacote</li>'
